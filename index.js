@@ -11,7 +11,10 @@ const bidRoutes = require('./routes/bid');
 const userRoutes = require('./routes/user');
 const receiptRoutes = require('./routes/receipts');
 const notificationRoutes = require('./routes/notification');
+<<<<<<< HEAD
 const chatRoutes = require('./routes/chatRoutes');
+=======
+>>>>>>> be907b8a21d6508a710347a2281fbbad7f6061ce
 
 // ✅ Models & Helpers for Cron Endpoints
 const Auction = require('./models/Auction');
