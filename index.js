@@ -11,6 +11,7 @@ const bidRoutes = require('./routes/bid');
 const userRoutes = require('./routes/user');
 const receiptRoutes = require('./routes/receipts');
 const notificationRoutes = require('./routes/notification');
+const chatRoutes = require('./routes/chatRoutes');
 
 // ✅ Models & Helpers for Cron Endpoints
 const Auction = require('./models/Auction');
@@ -33,6 +34,9 @@ app.use('/api/bids', bidRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/receipts', receiptRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/chats', chatRoutes);
+app.use('/api/chats', require('./routes/chatRoutes'));
+
 
 // ✅ Test route
 app.get('/', (req, res) => {
