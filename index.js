@@ -35,7 +35,6 @@ app.use('/api/users', userRoutes);
 app.use('/api/receipts', receiptRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/chats', chatRoutes);
-app.use('/api/chats', require('./routes/chatRoutes'));
 
 
 // ✅ Test route
