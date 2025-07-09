@@ -63,9 +63,30 @@ router.get('/mine/:sellerId', async (req, res) => {
 // ✅ Sadece aktif (bitmemiş) mezatları listele — anasayfa
 router.get('/all', async (req, res) => {
   try {
-    const auctions = await Auction.find({ isEnded: false }) // 🔴 sadece aktif olanlar
-      .populate('seller', 'companyName')
-      .sort({ createdAt: -1 });
+    // Önce aktif mezat sayısını bul
+    const total = await Auction.countDocuments({ isEnded: false });
+
+    const auctions = await Auction.aggregate([
+      { $match: { isEnded: false } },
+      { $sample: { size: total } }, // Hepsini random sırayla al
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'seller',
+          foreignField: '_id',
+          as: 'sellerData'
+        }
+      },
+      {
+        $addFields: {
+          seller: {
+            _id: { $arrayElemAt: ['$sellerData._id', 0] },
+            companyName: { $arrayElemAt: ['$sellerData.companyName', 0] }
+          }
+        }
+      },
+      { $project: { sellerData: 0 } }
+    ]);
 
     res.status(200).json(auctions);
   } catch (err) {
@@ -73,6 +94,7 @@ router.get('/all', async (req, res) => {
     res.status(500).json({ message: 'Sunucu hatası', error: err.message });
   }
 });
+
 
 // ✅ Belirli mezat detaylarını getir
 router.get('/:id', async (req, res) => {

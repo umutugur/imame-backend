@@ -44,18 +44,18 @@ exports.unbanUser = async (req, res) => {
   }
 };
 
-// 🔹 Bildirim token'ını güncelle
+// Bildirim token'ını güncelle
 exports.updateNotificationToken = async (req, res) => {
   try {
-    const { userId, pushToken } = req.body;
+    const { userId, token } = req.body; // pushToken → token
 
-    if (!userId || !pushToken) {
+    if (!userId || !token) {
       return res.status(400).json({ message: 'Kullanıcı ID ve push token gerekli.' });
     }
 
     const user = await User.findByIdAndUpdate(
       userId,
-      { notificationToken: pushToken },
+      { notificationToken: token }, // pushToken → token
       { new: true }
     );
 
@@ -68,3 +68,4 @@ exports.updateNotificationToken = async (req, res) => {
     res.status(500).json({ message: 'Sunucu hatası.', error: err.message });
   }
 };
+

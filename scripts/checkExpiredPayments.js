@@ -46,9 +46,9 @@ async function runBanCheck() {
       console.log(`❌ Kullanıcı ${user._id} 48 saat içinde dekont yüklemedi → BANLANDI`);
 
       // Bildirim gönder
-      if (user.pushToken) {
+      if (user.notificationToken) {
         await admin.messaging().send({
-          token: user.pushToken,
+          token: user.notificationToken,
           notification: {
             title: 'Hesabınız askıya alındı',
             body: '48 saat içinde dekont yüklemediğiniz için hesabınız 7 günlüğüne geçici olarak askıya alındı.',

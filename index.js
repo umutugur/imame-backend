@@ -116,22 +116,23 @@ app.post('/cron/check-receipts', async (req, res) => {
       console.log(`❌ Kullanıcı ${user._id} 48 saat içinde dekont yüklemedi → BANLANDI`);
 
       // Push bildirimi
-      if (user.pushToken) {
-        await admin.messaging().send({
-          token: user.pushToken,
-          notification: {
-            title: 'Hesabınız askıya alındı',
-            body: '48 saat içinde dekont yüklemediğiniz için hesabınız 7 günlüğüne geçici olarak askıya alındı.',
-          },
-          data: {
-            type: 'ban',
-            userId: user._id.toString(),
-          },
-        });
-        console.log(`📩 Push bildirimi gönderildi → ${user.email || user._id}`);
-      } else {
-        console.log(`⚠️ Kullanıcının pushToken'ı yok → ${user.email || user._id}`);
-      }
+      if (user.notificationToken) {
+  await admin.messaging().send({
+    token: user.notificationToken,
+    notification: {
+      title: 'Hesabınız askıya alındı',
+      body: '48 saat içinde dekont yüklemediğiniz için hesabınız 7 günlüğüne geçici olarak askıya alındı.',
+    },
+    data: {
+      type: 'ban',
+      userId: user._id.toString(),
+    },
+  });
+  console.log(`📩 Push bildirimi gönderildi → ${user.email || user._id}`);
+} else {
+  console.log(`⚠️ Kullanıcının notificationToken'ı yok → ${user.email || user._id}`);
+}
+
     }
 
     console.log('✅ /cron/check-receipts çağrısı tamamlandı.');
