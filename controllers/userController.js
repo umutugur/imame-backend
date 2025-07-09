@@ -47,15 +47,15 @@ exports.unbanUser = async (req, res) => {
 // Bildirim token'ını güncelle
 exports.updateNotificationToken = async (req, res) => {
   try {
-    const { userId, token } = req.body; // pushToken → token
+    const { userId, pushToken } = req.body; // pushToken → token
 
-    if (!userId || !token) {
+    if (!userId || !pushToken) {
       return res.status(400).json({ message: 'Kullanıcı ID ve push token gerekli.' });
     }
 
     const user = await User.findByIdAndUpdate(
       userId,
-      { notificationToken: token }, // pushToken → token
+      { notificationToken: pushToken }, // pushToken → token
       { new: true }
     );
 
