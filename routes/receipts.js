@@ -100,11 +100,18 @@ router.patch('/:auctionId/reject', async (req, res) => {
   try {
     const { auctionId } = req.params;
 
-    const auction = await Auction.findByIdAndUpdate(
-      auctionId,
-      { receiptStatus: 'rejected' },
-      { new: true }
-    ).populate('winner');
+   const auction = await Auction.findByIdAndUpdate(
+  auctionId,
+  {
+    $set: {
+      receiptStatus: 'rejected',
+      receiptUploaded: false,
+      receiptUrl: '', // veya dosya yolunun adı neyse, o alanı boşalt
+    }
+  },
+  { new: true }
+).populate('winner');
+
 
     if (!auction) return res.status(404).json({ message: 'Mezat bulunamadı' });
 

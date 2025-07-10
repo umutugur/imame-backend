@@ -9,6 +9,7 @@ const authRoutes = require('./routes/auth');
 const auctionRoutes = require('./routes/auction');
 const bidRoutes = require('./routes/bid');
 const userRoutes = require('./routes/user');
+console.log("userRoutes import edildi (index.js) 🚀"); // Buraya da log atabilirsin
 const receiptRoutes = require('./routes/receipts');
 const notificationRoutes = require('./routes/notification');
 const chatRoutes = require('./routes/chatRoutes');
