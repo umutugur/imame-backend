@@ -7,6 +7,7 @@ const Auction = require('../models/Auction');
 router.post('/', async (req, res) => {
   try {
     const { auctionId, userId, amount } = req.body;
+    console.log('TEKLİF BODY:', req.body);
 
     // Mezatı ve son fiyatı çek
     const auction = await Auction.findById(auctionId);
