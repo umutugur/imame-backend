@@ -22,5 +22,10 @@ router.patch('/unban/:id', unbanUser);
 
 // 🔹 Bildirim token'ını güncelle
 router.post('/update-token', updateNotificationToken); // 👈 yeni route
+router.post('/update-token/test', (req, res) => {
+  console.log('TEST ENDPOINT çalıştı!');
+  res.json({ message: 'test OK' });
+});
+
 
 module.exports = router;
