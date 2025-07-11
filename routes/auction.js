@@ -100,7 +100,8 @@ router.get('/all', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const auction = await Auction.findById(req.params.id)
-      .populate('seller', 'companyName');
+      .populate('seller', 'companyName')
+      .populate('winner', 'name'); 
 
     if (!auction) {
       return res.status(404).json({ message: 'Mezat bulunamadı.' });
