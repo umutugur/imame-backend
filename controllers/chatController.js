@@ -60,6 +60,27 @@ exports.getChat = async (req, res) => {
     res.status(500).json({ message: 'Sunucu hatası.' });
   }
 };
+// Kullanıcıya ait tüm chatleri getir
+exports.getUserChats = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Hem alıcı hem satıcı olarak
+    const chats = await Chat.find({
+      $or: [
+        { buyer: userId },
+        { seller: userId }
+      ]
+    })
+    .populate('buyer seller auction')
+    .sort({ updatedAt: -1 });
+
+    res.json({ success: true, chats });
+  } catch (err) {
+    console.error('❌ Kullanıcının chatleri alınamadı:', err);
+    res.status(500).json({ message: 'Sunucu hatası.' });
+  }
+};
 
 /**
  * ✅ 3) Mesaj gönder
