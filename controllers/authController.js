@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
+const { admin } = require('../utils/firebaseAdmin');
 
 // Kullanıcı Kaydı
 exports.register = async (req, res) => {
@@ -57,59 +58,53 @@ exports.login = async (req, res) => {
 
 // Google / Facebook Giriş
 exports.socialLogin = async (req, res) => {
-  const { provider, accessToken } = req.body;
-
   try {
-    let profile;
-
-    if (provider === 'google') {
-      const response = await axios.get(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${accessToken}`);
-      const { email, name, sub } = response.data;
-      profile = { email, name, googleId: sub };
-    }
-    else if (provider === 'facebook') {
-      const response = await axios.get(`https://graph.facebook.com/me?fields=id,name,email&access_token=${accessToken}`);
-      const { id, name, email } = response.data;
-      profile = { email, name, facebookId: id };
-    }
-    else {
-      return res.status(400).json({ message: 'Geçersiz provider.' });
+    const { idToken } = req.body;
+    if (!idToken) {
+      return res.status(400).json({ message: 'idToken eksik.' });
     }
 
-    let user = await User.findOne({ email: profile.email });
+    // Firebase'den token doğrulama
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const { uid, email, name } = decoded;
 
+    if (!email) {
+      return res.status(400).json({ message: 'Email bilgisi alınamadı.' });
+    }
+
+    // Kullanıcıyı MongoDB'de bul veya oluştur
+    let user = await User.findOne({ email });
     if (!user) {
       user = new User({
-        name: profile.name,
-        email: profile.email,
-        googleId: profile.googleId,
-        facebookId: profile.facebookId,
+        name: name || '',
+        email,
+        googleId: uid,
         role: 'buyer',
       });
-
       await user.save();
     }
 
     if (user.isBanned) {
-      return res.status(403).json({ message: 'Hesabınız banlanmıştır.' });
+      return res.status(403).json({ message: 'Hesabınız banlı.' });
     }
 
     return res.status(200).json({
-      message: 'Sosyal giriş başarılı.',
+      message: 'Giriş başarılı.',
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
-        address: user.address || {},  // Nesne olarak döndür
+        address: user.address || {},
         phone: user.phone || '',
       },
     });
   } catch (err) {
-    console.error('Sosyal giriş hatası:', err.message);
+    console.error('❌ Sosyal giriş hatası:', err);
     return res.status(500).json({ message: 'Sunucu hatası.', error: err.message });
   }
 };
+
 
 // Profil Güncelleme
 exports.updateProfile = async (req, res) => {
