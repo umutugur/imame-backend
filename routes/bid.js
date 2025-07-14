@@ -68,15 +68,19 @@ router.get('/user/:userId', async (req, res) => {
     const userId = req.params.userId;
 
     // 1️⃣ Kullanıcının teklif verdiği aktif mezatları çek
-    const userBids = await Bid.find({ user: userId })
-      .populate({
-        path: 'auction',
-        select: 'title winner isEnded images currentPrice',
-      })
-      .lean();
+   const userBids = await Bid.find({ user: userId })
+  .populate({
+    path: 'auction',
+    select: 'title winner isEnded images currentPrice',
+  })
+  .lean();
 
-    // 2️⃣ Sadece aktif mezatlar
-    const activeBids = userBids.filter(b => b.auction && !b.auction.isEnded);
+// Auction'u populate edemeyen (silinmiş olan) kayıtları filtrele
+const populatedBids = userBids.filter(b => b.auction != null);
+
+// Sadece aktif mezatlar
+const activeBids = populatedBids.filter(b => !b.auction.isEnded);
+
 
     // 3️⃣ Mezata göre kullanıcının kendi son teklifini bul
     const myLatestByAuction = new Map();
