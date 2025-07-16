@@ -57,28 +57,43 @@ exports.login = async (req, res) => {
 };
 
 // Google / Facebook Giriş
+
 exports.socialLogin = async (req, res) => {
   try {
-    const { idToken } = req.body;
-    if (!idToken) {
-      return res.status(400).json({ message: 'idToken eksik.' });
+    const { accessToken, idToken } = req.body;
+
+    let googleUser = null;
+
+    // 1. Önce idToken varsa Google endpointi ile doğrula (mobilden idToken gelirse)
+    if (idToken) {
+      const response = await axios.get(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
+      );
+      googleUser = response.data;
+    }
+    // 2. accessToken varsa Google'ın userinfo endpointinden kullanıcı bilgilerini al (genellikle mobilde gelir)
+    else if (accessToken) {
+      const response = await axios.get(
+        `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${accessToken}`
+      );
+      googleUser = response.data;
+    } else {
+      return res.status(400).json({ message: 'idToken veya accessToken eksik.' });
     }
 
-    // Firebase'den token doğrulama
-    const decoded = await admin.auth().verifyIdToken(idToken);
-    const { uid, email, name } = decoded;
-
+    // Google user objesini kontrol et
+    const { email, name, sub } = googleUser;
     if (!email) {
       return res.status(400).json({ message: 'Email bilgisi alınamadı.' });
     }
 
-    // Kullanıcıyı MongoDB'de bul veya oluştur
+    // Kullanıcıyı bul veya oluştur
     let user = await User.findOne({ email });
     if (!user) {
       user = new User({
         name: name || '',
         email,
-        googleId: uid,
+        googleId: sub || googleUser.user_id || '', // Google kullanıcı kimliği
         role: 'buyer',
       });
       await user.save();
@@ -100,7 +115,7 @@ exports.socialLogin = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('❌ Sosyal giriş hatası:', err);
+    console.error('❌ Sosyal giriş hatası:', err.response?.data || err.message || err);
     return res.status(500).json({ message: 'Sunucu hatası.', error: err.message });
   }
 };

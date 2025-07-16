@@ -63,44 +63,52 @@ router.get('/:auctionId', async (req, res) => {
 });
 
 // Kullanıcının tüm tekliflerini, her mezat için sadece son teklifi getir
+// routes/bid.js
 router.get('/user/:userId', async (req, res) => {
   try {
     const userId = req.params.userId;
 
-    // 1️⃣ Kullanıcının teklif verdiği aktif mezatları çek
-   const userBids = await Bid.find({ user: userId })
-  .populate({
-    path: 'auction',
-    select: 'title winner isEnded images currentPrice',
-  })
-  .lean();
+    // Kullanıcının verdiği tüm teklifleri, mezat ve user ile birlikte çek
+    const userBids = await Bid.find({ user: userId })
+      .populate({
+        path: 'auction',
+        select: 'title winner isEnded images currentPrice isSigned',
+      })
+      .lean();
 
-// Auction'u populate edemeyen (silinmiş olan) kayıtları filtrele
-const populatedBids = userBids.filter(b => b.auction != null);
+    // Auction'u populate edemeyen (silinmiş olan) kayıtları filtrele
+    const populatedBids = userBids.filter(b => b.auction != null);
 
-// Sadece aktif mezatlar
-const activeBids = populatedBids.filter(b => !b.auction.isEnded);
+    // Sadece bitmemiş (aktif) mezatlar
+    const activeBids = populatedBids.filter(b => !b.auction.isEnded);
 
-
-    // 3️⃣ Mezata göre kullanıcının kendi son teklifini bul
+    // Her mezat için kullanıcının en son teklifini bul
     const myLatestByAuction = new Map();
     for (const bid of activeBids) {
       const aid = bid.auction._id.toString();
-      if (!myLatestByAuction.has(aid) || new Date(bid.createdAt) > new Date(myLatestByAuction.get(aid).createdAt)) {
+      if (
+        !myLatestByAuction.has(aid) ||
+        new Date(bid.createdAt) > new Date(myLatestByAuction.get(aid).createdAt)
+      ) {
         myLatestByAuction.set(aid, bid);
       }
     }
 
-    // 4️⃣ Her mezat için son (herkesin) teklifi DB'den çek ve durum belirle
+    // Her mezat için son (herkesin) teklifi bul ve status ekle
     const results = [];
     for (const [auctionId, myBid] of myLatestByAuction.entries()) {
-      const lastBid = await Bid.findOne({ auction: auctionId }).sort({ createdAt: -1 }).lean();
+      const lastBid = await Bid.findOne({ auction: auctionId })
+        .sort({ createdAt: -1 })
+        .lean();
       if (!lastBid) continue;
 
       results.push({
         ...myBid,
         auctionCurrentPrice: lastBid.amount,
-        statusText: lastBid.user.toString() === userId ? 'Teklif Verildi' : 'Sizden sonra teklif verildi',
+        statusText:
+          lastBid.user.toString() === userId
+            ? 'Teklif Verildi'
+            : 'Sizden sonra teklif verildi',
       });
     }
 
@@ -110,6 +118,7 @@ const activeBids = populatedBids.filter(b => !b.auction.isEnded);
     res.status(500).json({ message: 'Sunucu hatası', error: err.message });
   }
 });
+
 
 
 module.exports = router;
