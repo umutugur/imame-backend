@@ -59,6 +59,7 @@ exports.login = async (req, res) => {
 // Google / Facebook Giriş
 
 exports.socialLogin = async (req, res) => {
+    console.log("🔥 Sosyal login API çağrısı:", req.body);
   try {
     const { accessToken, idToken } = req.body;
 
@@ -66,17 +67,21 @@ exports.socialLogin = async (req, res) => {
 
     // 1. Önce idToken varsa Google endpointi ile doğrula (mobilden idToken gelirse)
     if (idToken) {
+      console.log("✅ idToken ile Google doğrulama");
       const response = await axios.get(
         `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
       );
       googleUser = response.data;
+      console.log("Google user (idToken ile):", googleUser);
     }
     // 2. accessToken varsa Google'ın userinfo endpointinden kullanıcı bilgilerini al (genellikle mobilde gelir)
     else if (accessToken) {
+       console.log("✅ accessToken ile Google doğrulama");
       const response = await axios.get(
         `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${accessToken}`
       );
       googleUser = response.data;
+      console.log("Google user (accessToken ile):", googleUser);
     } else {
       return res.status(400).json({ message: 'idToken veya accessToken eksik.' });
     }
