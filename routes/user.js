@@ -6,6 +6,9 @@ const {
   banUser,
   unbanUser,
   updateNotificationToken, // 👈 ekledik
+  addFavoriteSeller,
+  removeFavoriteSeller,
+  getFavoriteSellers,
 } = require('../controllers/userController');
 
 // 🔐 Tüm kullanıcıları listele (admin)
@@ -26,6 +29,12 @@ router.post('/update-token/test', (req, res) => {
   console.log('TEST ENDPOINT çalıştı!');
   res.json({ message: 'test OK' });
 });
+// Favori satıcı ekle
+router.post('/favorites/add', addFavoriteSeller);
+// Favori satıcı çıkar
+router.post('/favorites/remove', removeFavoriteSeller);
+// Favori satıcıları getir
+router.get('/favorites/:userId', getFavoriteSellers);
 
 
 module.exports = router;

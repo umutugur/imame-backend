@@ -131,6 +131,43 @@ router.get('/won/:buyerId', async (req, res) => {
     res.status(500).json({ message: 'Sunucu hatası', error: err.message });
   }
 });
+// GET /api/auctions/favorites/:userId
+router.get('/favorites/:userId', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user || !user.favorites || user.favorites.length === 0) {
+      return res.json([]); // Favori yoksa boş dizi
+    }
+    // Sadece bitmemiş mezatlar (isEnded: false)
+    const auctions = await Auction.find({
+      seller: { $in: user.favorites },
+      isEnded: false,
+    })
+      .populate('seller', 'companyName name')
+      .sort({ createdAt: -1 });
+
+    res.json(auctions);
+  } catch (err) {
+    res.status(500).json({ message: 'Favori mezatlar getirilemedi', error: err.message });
+  }
+});
+// routes/auction.js içinde
+// GET /api/auctions/won-by/:buyerId/:sellerId
+router.get('/won-by/:buyerId/:sellerId', async (req, res) => {
+  const { buyerId, sellerId } = req.params;
+  // Alıcının kazandığı, bu satıcıya ait mezatlar var mı?
+  const count = await Auction.countDocuments({
+    seller: sellerId,
+    winner: buyerId,
+    isEnded: true
+  });
+  res.json({ hasWon: count > 0 });
+});
+// routes/auction.js (sonuna ekle)
+const { deleteAuctionWithReason } = require('../controllers/auctionController');
+
+router.post('/delete/:auctionId', deleteAuctionWithReason); // admin yetkisi gerekecek!
+
 
 
 module.exports = router;

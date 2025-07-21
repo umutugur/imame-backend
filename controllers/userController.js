@@ -68,4 +68,57 @@ exports.updateNotificationToken = async (req, res) => {
     res.status(500).json({ message: 'Sunucu hatası.', error: err.message });
   }
 };
+// FAVORİ SATICI EKLE
+exports.addFavoriteSeller = async (req, res) => {
+  try {
+    const { userId, sellerId } = req.body;
+    if (!userId || !sellerId) return res.status(400).json({ message: 'Eksik bilgi.' });
+
+    // Zaten ekliyse tekrar ekleme
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+    if (user.favorites && user.favorites.includes(sellerId)) {
+      return res.status(200).json({ message: 'Satıcı zaten favorilerde.' });
+    }
+
+    user.favorites = [...(user.favorites || []), sellerId];
+    await user.save();
+
+    res.json({ message: 'Favori satıcı eklendi.', favorites: user.favorites });
+  } catch (err) {
+    res.status(500).json({ message: 'Sunucu hatası', error: err.message });
+  }
+};
+
+// FAVORİ SATICI ÇIKAR
+exports.removeFavoriteSeller = async (req, res) => {
+  try {
+    const { userId, sellerId } = req.body;
+    if (!userId || !sellerId) return res.status(400).json({ message: 'Eksik bilgi.' });
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+
+    user.favorites = (user.favorites || []).filter(id => id.toString() !== sellerId);
+    await user.save();
+
+    res.json({ message: 'Favori satıcı çıkarıldı.', favorites: user.favorites });
+  } catch (err) {
+    res.status(500).json({ message: 'Sunucu hatası', error: err.message });
+  }
+};
+
+// FAVORİ SATICILARI GETİR
+exports.getFavoriteSellers = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await User.findById(userId).populate('favorites', 'name email companyName'); // istediğin alanlar
+    if (!user) return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+
+    res.json(user.favorites || []);
+  } catch (err) {
+    res.status(500).json({ message: 'Sunucu hatası', error: err.message });
+  }
+};
+
 
