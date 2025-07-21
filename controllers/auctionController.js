@@ -2,7 +2,7 @@
 
 const Auction = require('../models/Auction');
 const User = require('../models/User');
-const { sendPushNotification } = require('../routes/sendPushNotification');
+const { sendPushNotification } = require('../routes/notification');
 
 exports.deleteAuctionWithReason = async (req, res) => {
   try {
