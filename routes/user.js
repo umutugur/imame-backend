@@ -35,6 +35,17 @@ router.post('/favorites/add', addFavoriteSeller);
 router.post('/favorites/remove', removeFavoriteSeller);
 // Favori satıcıları getir
 router.get('/favorites/:userId', getFavoriteSellers);
+// Satıcı bilgilerini getir
+router.get('/:id', async (req, res) => {
+  try {
+    const user = await require('../models/User').findById(req.params.id).select('-password');
+    if (!user) return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
+    res.json(user);
+  } catch (err) {
+    console.error('Kullanıcı getirilemedi:', err);
+    res.status(500).json({ message: 'Sunucu hatası' });
+  }
+});
 
 
 module.exports = router;
