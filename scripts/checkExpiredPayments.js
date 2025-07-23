@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const Auction = require('../models/Auction');
 const User = require('../models/User');
 const admin = require('../utils/firebaseAdmin'); // 🔥 Bildirim için ekledik
+const { sendExpoPushNotification } = require('../utils/expoPush');
 require('dotenv').config();
 
 mongoose.connect(process.env.MONGO_URI, {
@@ -47,21 +48,19 @@ async function runBanCheck() {
 
       // Bildirim gönder
       if (user.notificationToken) {
-        await admin.messaging().send({
-          token: user.notificationToken,
-          notification: {
-            title: 'Hesabınız askıya alındı',
-            body: '48 saat içinde dekont yüklemediğiniz için hesabınız 7 günlüğüne geçici olarak askıya alındı.',
-          },
-          data: {
-            type: 'ban',
-            userId: user._id.toString(),
-          },
-        });
-        console.log(`📩 Push bildirimi gönderildi → ${user.email || user._id}`);
-      } else {
-        console.log(`⚠️ Kullanıcının pushToken'ı yok → ${user.email || user._id}`);
-      }
+  await sendExpoPushNotification(
+    user.notificationToken,
+    'Hesabınız askıya alındı',
+    '48 saat içinde dekont yüklemediğiniz için hesabınız 7 günlüğüne geçici olarak askıya alındı.',
+    {
+      type: 'ban',
+      userId: user._id.toString(),
+    }
+  );
+  console.log(`📩 Push bildirimi gönderildi → ${user.email || user._id}`);
+} else {
+  console.log(`⚠️ Kullanıcının pushToken'ı yok → ${user.email || user._id}`);
+}
     }
 
     console.log('✅ Ban kontrolü tamamlandı.');

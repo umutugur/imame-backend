@@ -5,6 +5,7 @@ const Auction = require('../models/Auction');
 const Bid = require('../models/Bid');
 const User = require('../models/User');
 const { sendNotificationToUser } = require('../utils/firebaseAdmin'); // 🔔 Bildirim fonksiyonu
+const { sendExpoPushNotification } = require('../utils/expoPush');
 require('dotenv').config();
 
 mongoose.connect(process.env.MONGO_URI, {
@@ -20,7 +21,6 @@ mongoose.connect(process.env.MONGO_URI, {
 async function runCron() {
   try {
     const now = new Date();
-
     const expiredAuctions = await Auction.find({
       endsAt: { $lte: now },
       isEnded: false,
@@ -41,11 +41,11 @@ async function runCron() {
         // 🔔 Alıcıya bildirim gönder
         const user = await User.findById(highestBid.user);
         if (user?.notificationToken) {
-          await sendNotificationToUser(
-            user.notificationToken,
-            'Mezatı Kazandınız!',
-            'Tebrikler! 48 saat içinde dekont yüklemeniz gerekiyor.'
-          );
+  await sendExpoPushNotification(
+    user.notificationToken,
+    'Mezatı Kazandınız!',
+    'Tebrikler! 48 saat içinde dekont yüklemeniz gerekiyor.'
+  );
         }
       } else {
         await auction.save();
