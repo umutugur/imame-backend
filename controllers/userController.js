@@ -120,5 +120,28 @@ exports.getFavoriteSellers = async (req, res) => {
     res.status(500).json({ message: 'Sunucu hatası', error: err.message });
   }
 };
+// FAVORİYİ AÇ/KAPA (toggle)
+exports.toggleFavoriteSeller = async (req, res) => {
+  try {
+    const { userId, sellerId } = req.body;
+    if (!userId || !sellerId) return res.status(400).json({ message: 'Eksik bilgi.' });
 
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+
+    const alreadyFavorited = user.favorites?.includes(sellerId);
+
+    if (alreadyFavorited) {
+      user.favorites = user.favorites.filter(id => id.toString() !== sellerId);
+    } else {
+      user.favorites.push(sellerId);
+    }
+
+    await user.save();
+
+    res.json({ message: alreadyFavorited ? 'Favoriden çıkarıldı' : 'Favoriye eklendi', status: alreadyFavorited ? 'removed' : 'added' });
+  } catch (err) {
+    res.status(500).json({ message: 'Sunucu hatası', error: err.message });
+  }
+};
 
