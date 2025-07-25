@@ -9,11 +9,12 @@ const authRoutes = require('./routes/auth');
 const auctionRoutes = require('./routes/auction');
 const bidRoutes = require('./routes/bid');
 const userRoutes = require('./routes/user');
-console.log("userRoutes import edildi (index.js) 🚀"); // Buraya da log atabilirsin
 const receiptRoutes = require('./routes/receipts');
 const notificationRoutes = require('./routes/notification');
 const chatRoutes = require('./routes/chatRoutes');
 const userNotificationsRoutes = require('./routes/userNotifications');
+const ratingRoutes = require('./routes/rating');
+const reportRoutes = require('./routes/report');
 
 // ✅ Models & Helpers for Cron Endpoints
 const Auction = require('./models/Auction');
@@ -37,7 +38,8 @@ app.use('/api/receipts', receiptRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/user-notifications', userNotificationsRoutes);
-
+app.use('/api/ratings', ratingRoutes);
+app.use('/api/reports', reportRoutes);
 
 // ✅ Test route
 app.get('/', (req, res) => {
