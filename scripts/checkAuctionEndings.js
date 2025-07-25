@@ -4,7 +4,6 @@ const mongoose = require('mongoose');
 const Auction = require('../models/Auction');
 const Bid = require('../models/Bid');
 const User = require('../models/User');
-const { sendNotificationToUser } = require('../utils/firebaseAdmin'); // 🔔 Bildirim fonksiyonu
 const { sendExpoPushNotification } = require('../utils/expoPush');
 require('dotenv').config();
 

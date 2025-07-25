@@ -3,7 +3,6 @@
 const mongoose = require('mongoose');
 const Auction = require('../models/Auction');
 const User = require('../models/User');
-const admin = require('../utils/firebaseAdmin'); // 🔥 Bildirim için ekledik
 const { sendExpoPushNotification } = require('../utils/expoPush');
 require('dotenv').config();
 

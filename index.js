@@ -18,7 +18,7 @@ const chatRoutes = require('./routes/chatRoutes');
 const Auction = require('./models/Auction');
 const Bid = require('./models/Bid');
 const User = require('./models/User');
-const { sendNotificationToUser } = require('./utils/firebaseAdmin');
+const { sendExpoPushNotification } = require('./utils/expoPush');
 const admin = require('./utils/firebaseAdmin');
 
 const app = express();
@@ -68,7 +68,7 @@ app.post('/cron/end-auctions', async (req, res) => {
         // Bildirim gönder
         const user = await User.findById(highestBid.user);
         if (user?.notificationToken) {
-          await sendNotificationToUser(
+          await sendExpoPushNotification(
             user.notificationToken,
             'Mezatı Kazandınız!',
             'Tebrikler! 48 saat içinde dekont yüklemeniz gerekiyor.'
@@ -118,17 +118,13 @@ app.post('/cron/check-receipts', async (req, res) => {
 
       // Push bildirimi
       if (user.notificationToken) {
-  await admin.messaging().send({
-    token: user.notificationToken,
-    notification: {
-      title: 'Hesabınız askıya alındı',
-      body: '48 saat içinde dekont yüklemediğiniz için hesabınız 7 günlüğüne geçici olarak askıya alındı.',
-    },
-    data: {
-      type: 'ban',
-      userId: user._id.toString(),
-    },
-  });
+  await sendExpoPushNotification(
+  user.notificationToken,
+  'Hesabınız askıya alındı',
+  '48 saat içinde dekont yüklemediğiniz için hesabınız 7 günlüğüne geçici olarak askıya alındı.',
+  { type: 'ban', userId: user._id.toString() }
+);
+
   console.log(`📩 Push bildirimi gönderildi → ${user.email || user._id}`);
 } else {
   console.log(`⚠️ Kullanıcının notificationToken'ı yok → ${user.email || user._id}`);

@@ -2,7 +2,8 @@
 
 const Auction = require('../models/Auction');
 const User = require('../models/User');
-const { sendPushNotification } = require('../routes/notification');
+const { sendExpoPushNotification } = require('../utils/expoPush');
+
 
 exports.deleteAuctionWithReason = async (req, res) => {
   try {
@@ -15,7 +16,7 @@ exports.deleteAuctionWithReason = async (req, res) => {
 
     // Satıcıya bildirim at
     if (auction.seller?.notificationToken) {
-      await sendPushNotification({
+      await sendExpoPushNotification({
         to: auction.seller.notificationToken,
         title: 'Mezatınız kaldırıldı',
         body: `Bir mezatınız silindi. Sebep: ${reason}`,
