@@ -9,8 +9,10 @@ const {
   addFavoriteSeller,
   removeFavoriteSeller,
   getFavoriteSellers,
+  toggleFavoriteSeller,
 } = require('../controllers/userController');
 
+router.post('/toggle-favorite', toggleFavoriteSeller);
 // 🔐 Tüm kullanıcıları listele (admin)
 router.get('/all', getAllUsers);
 
