@@ -1,5 +1,7 @@
-const admin = require('../utils/firebaseAdmin');
 const User = require('../models/User');
+
+// Artık firebaseAdmin import edilmiyor:
+// const admin = require('../utils/firebaseAdmin');  // <-- silinmeli
 
 exports.sendPushNotification = async (req, res) => {
   const { title, message, toAllBuyers, toAllSellers, email } = req.body;
@@ -16,14 +18,20 @@ exports.sendPushNotification = async (req, res) => {
       if (toAllSellers) roles.push('seller');
 
       if (roles.length > 0) {
-        users = await User.find({ role: { $in: roles }, notificationToken: { $exists: true, $ne: null } });
+        users = await User.find({
+          role: { $in: roles },
+          notificationToken: { $exists: true, $ne: null },
+        });
       }
     }
 
     if (users.length === 0) {
-      return res.status(404).json({ message: 'Bildirim gönderilecek kullanıcı bulunamadı.' });
+      return res
+        .status(404)
+        .json({ message: 'Bildirim gönderilecek kullanıcı bulunamadı.' });
     }
 
+    // Expo’ya toplu push mesajı
     const messages = users.map((user) => ({
       to: user.notificationToken,
       sound: 'default',
@@ -45,6 +53,8 @@ exports.sendPushNotification = async (req, res) => {
     res.status(200).json({ message: 'Bildirim(ler) gönderildi', result });
   } catch (err) {
     console.error('Bildirim gönderme hatası:', err);
-    res.status(500).json({ message: 'Sunucu hatası', error: err.message });
+    res
+      .status(500)
+      .json({ message: 'Sunucu hatası', error: err.message });
   }
 };
