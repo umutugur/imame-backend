@@ -1,7 +1,8 @@
 // utils/expoPush.js
 const fetch = require('node-fetch');
+const NotificationModel = require('../models/Notification');
 
-const sendExpoPushNotification = async (expoPushToken, title, body, data = {}) => {
+const sendExpoPushNotification = async (expoPushToken, title, body, data = {}, userId) => {
   try {
     const message = {
       to: expoPushToken,
@@ -21,9 +22,20 @@ const sendExpoPushNotification = async (expoPushToken, title, body, data = {}) =
       body: JSON.stringify(message),
     });
 
-    const result = await response.json();
+    await response.json();
+
+    // Bildirimi DB'ye kaydet (userId varsa)
+    if (userId) {
+      await NotificationModel.create({
+        user: userId,
+        title,
+        message: body,
+        data,
+        isRead: false,
+      });
+    }
+
     console.log(`📩 Expo bildirimi gönderildi: ${title} → ${expoPushToken}`);
-    return result;
   } catch (error) {
     console.error('❌ Expo bildirim gönderme hatası:', error);
   }

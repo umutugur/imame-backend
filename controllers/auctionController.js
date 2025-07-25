@@ -15,15 +15,15 @@ exports.deleteAuctionWithReason = async (req, res) => {
     if (!auction) return res.status(404).json({ message: 'Mezat bulunamadı.' });
 
     // Satıcıya bildirim at
-    if (auction.seller?.notificationToken) {
-      await sendExpoPushNotification({
-        to: auction.seller.notificationToken,
-        title: 'Mezatınız kaldırıldı',
-        body: `Bir mezatınız silindi. Sebep: ${reason}`,
-        data: { type: 'auction_deleted', auctionId, reason }
-      });
-    }
-
+    // controllers/auctionController.js
+if (auction.seller?.notificationToken) {
+  await sendExpoPushNotification(
+    auction.seller.notificationToken,
+    'Mezatınız kaldırıldı',
+    `Bir mezatınız silindi. Sebep: ${reason}`,
+    { type: 'auction_deleted', auctionId, reason }
+  );
+}
     // Mezatı sil
     await Auction.deleteOne({ _id: auctionId });
 

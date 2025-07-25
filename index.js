@@ -13,13 +13,13 @@ console.log("userRoutes import edildi (index.js) 🚀"); // Buraya da log atabil
 const receiptRoutes = require('./routes/receipts');
 const notificationRoutes = require('./routes/notification');
 const chatRoutes = require('./routes/chatRoutes');
+const userNotificationsRoutes = require('./routes/userNotifications');
 
 // ✅ Models & Helpers for Cron Endpoints
 const Auction = require('./models/Auction');
 const Bid = require('./models/Bid');
 const User = require('./models/User');
 const { sendExpoPushNotification } = require('./utils/expoPush');
-const admin = require('./utils/firebaseAdmin');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -36,6 +36,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/receipts', receiptRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/chats', chatRoutes);
+app.use('/api/user-notifications', userNotificationsRoutes);
 
 
 // ✅ Test route
@@ -69,10 +70,12 @@ app.post('/cron/end-auctions', async (req, res) => {
         const user = await User.findById(highestBid.user);
         if (user?.notificationToken) {
           await sendExpoPushNotification(
-            user.notificationToken,
-            'Mezatı Kazandınız!',
-            'Tebrikler! 48 saat içinde dekont yüklemeniz gerekiyor.'
-          );
+  user.notificationToken,
+  'Mezatı Kazandınız!',
+  'Tebrikler! 48 saat içinde dekont yüklemeniz gerekiyor.',
+  { type: 'auction_won', auctionId: auction._id.toString() },
+  user._id
+);
         }
       } else {
         await auction.save();
@@ -122,7 +125,7 @@ app.post('/cron/check-receipts', async (req, res) => {
   user.notificationToken,
   'Hesabınız askıya alındı',
   '48 saat içinde dekont yüklemediğiniz için hesabınız 7 günlüğüne geçici olarak askıya alındı.',
-  { type: 'ban', userId: user._id.toString() }
+  { type: 'ban', userId: user._id.toString() },user._id
 );
 
   console.log(`📩 Push bildirimi gönderildi → ${user.email || user._id}`);
