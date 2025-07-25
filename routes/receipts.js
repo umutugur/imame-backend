@@ -1,11 +1,12 @@
+// routes/receipts.js
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { storage } = require('../config/cloudinary'); // Cloudinary storage konfigürasyonu varsa
+const { storage } = require('../config/cloudinary');
 const upload = multer({ storage });
 const Auction = require('../models/Auction');
 const User = require('../models/User');
-const { sendNotificationToUser } = require('../utils/firebaseAdmin');
+const { sendExpoPushNotification } = require('../utils/expoPush'); // FCM yerine Expo
 
 // 🔹 Satıcının kendi bitmiş mezatlarının dekontlarını listele
 router.get('/mine/:sellerId', async (req, res) => {
@@ -52,10 +53,12 @@ router.put('/upload/:auctionId', async (req, res) => {
     // 🔔 Satıcıya push bildirimi gönder
     const seller = await User.findById(auction.seller);
     if (seller?.notificationToken) {
-      await sendNotificationToUser(
+      await sendExpoPushNotification(
         seller.notificationToken,
         'Yeni Dekont Yüklendi',
-        'Kazanan alıcı tarafından bir mezat için dekont yüklendi. Lütfen kontrol edin.'
+        'Kazanan alıcı tarafından bir mezat için dekont yüklendi. Lütfen kontrol edin.',
+        { type: 'receipt_uploaded', auctionId },
+        seller._id
       );
     }
 
@@ -82,10 +85,12 @@ router.patch('/:auctionId/approve', async (req, res) => {
     // 🔔 Kazanan alıcıya bildirim gönder
     const winner = auction.winner;
     if (winner?.notificationToken) {
-      await sendNotificationToUser(
+      await sendExpoPushNotification(
         winner.notificationToken,
         'Dekont Onaylandı',
-        'Satıcı, yüklediğiniz dekontu onayladı. Siparişiniz hazırlanıyor.'
+        'Satıcı, yüklediğiniz dekontu onayladı. Siparişiniz hazırlanıyor.',
+        { type: 'receipt_approved', auctionId },
+        winner._id
       );
     }
 
@@ -100,28 +105,29 @@ router.patch('/:auctionId/reject', async (req, res) => {
   try {
     const { auctionId } = req.params;
 
-   const auction = await Auction.findByIdAndUpdate(
-  auctionId,
-  {
-    $set: {
-      receiptStatus: 'rejected',
-      receiptUploaded: false,
-      receiptUrl: '', // veya dosya yolunun adı neyse, o alanı boşalt
-    }
-  },
-  { new: true }
-).populate('winner');
-
+    const auction = await Auction.findByIdAndUpdate(
+      auctionId,
+      {
+        $set: {
+          receiptStatus: 'rejected',
+          receiptUploaded: false,
+          receiptUrl: '',
+        },
+      },
+      { new: true }
+    ).populate('winner');
 
     if (!auction) return res.status(404).json({ message: 'Mezat bulunamadı' });
 
     // 🔔 Kazanan alıcıya bildirim gönder
     const winner = auction.winner;
     if (winner?.notificationToken) {
-      await sendNotificationToUser(
+      await sendExpoPushNotification(
         winner.notificationToken,
         'Dekont Reddedildi',
-        'Satıcı, yüklediğiniz dekontu reddetti. Lütfen tekrar yükleyin.'
+        'Satıcı, yüklediğiniz dekontu reddetti. Lütfen tekrar yükleyin.',
+        { type: 'receipt_rejected', auctionId },
+        winner._id
       );
     }
 
@@ -130,6 +136,5 @@ router.patch('/:auctionId/reject', async (req, res) => {
     res.status(500).json({ message: 'Sunucu hatası', error: err.message });
   }
 });
-
 
 module.exports = router;
