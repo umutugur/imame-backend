@@ -1,7 +1,7 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
-const { admin } = require('../utils/firebaseAdmin');
+
 
 // Kullanıcı Kaydı
 exports.register = async (req, res) => {
