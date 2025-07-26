@@ -1,7 +1,7 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
-
+const jwt = require('jsonwebtoken');
 
 // Kullanıcı Kaydı
 exports.register = async (req, res) => {
@@ -47,7 +47,7 @@ exports.login = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        address: user.address || {},   // Nesne olarak döndür
+        address: user.address || {},
         phone: user.phone || '',
       },
     });
@@ -56,75 +56,113 @@ exports.login = async (req, res) => {
   }
 };
 
-// Google / Facebook Giriş
-
+// Sosyal Giriş (Google veya Apple)
 exports.socialLogin = async (req, res) => {
-    console.log("🔥 Sosyal login API çağrısı:", req.body);
+  const { provider, accessToken, idToken, email: bodyEmail, name: bodyName } = req.body;
+
   try {
-    const { accessToken, idToken } = req.body;
+    if (provider === 'google') {
+      // Google kimlik doğrulaması
+      let googleUser = null;
 
-    let googleUser = null;
+      if (idToken) {
+        // idToken varsa Google tokeninfo endpointi ile doğrula
+        const response = await axios.get(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
+        );
+        googleUser = response.data;
+      } else if (accessToken) {
+        // accessToken varsa userinfo endpointinden kullanıcı bilgilerini al
+        const response = await axios.get(
+          `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${accessToken}`
+        );
+        googleUser = response.data;
+      } else {
+        return res.status(400).json({ message: 'idToken veya accessToken eksik.' });
+      }
 
-    // 1. Önce idToken varsa Google endpointi ile doğrula (mobilden idToken gelirse)
-    if (idToken) {
-      console.log("✅ idToken ile Google doğrulama");
-      const response = await axios.get(
-        `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
-      );
-      googleUser = response.data;
-      console.log("Google user (idToken ile):", googleUser);
-    }
-    // 2. accessToken varsa Google'ın userinfo endpointinden kullanıcı bilgilerini al (genellikle mobilde gelir)
-    else if (accessToken) {
-       console.log("✅ accessToken ile Google doğrulama");
-      const response = await axios.get(
-        `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${accessToken}`
-      );
-      googleUser = response.data;
-      console.log("Google user (accessToken ile):", googleUser);
-    } else {
-      return res.status(400).json({ message: 'idToken veya accessToken eksik.' });
-    }
+      const { email, name, sub } = googleUser;
+      if (!email) {
+        return res.status(400).json({ message: 'Email bilgisi alınamadı.' });
+      }
 
-    // Google user objesini kontrol et
-    const { email, name, sub } = googleUser;
-    if (!email) {
-      return res.status(400).json({ message: 'Email bilgisi alınamadı.' });
-    }
+      // Kullanıcıyı bul veya oluştur
+      let user = await User.findOne({ email });
+      if (!user) {
+        user = new User({
+          name: name || '',
+          email,
+          googleId: sub || googleUser.user_id || '',
+          role: 'buyer',
+        });
+        await user.save();
+      }
 
-    // Kullanıcıyı bul veya oluştur
-    let user = await User.findOne({ email });
-    if (!user) {
-      user = new User({
-        name: name || '',
-        email,
-        googleId: sub || googleUser.user_id || '', // Google kullanıcı kimliği
-        role: 'buyer',
+      if (user.isBanned) {
+        return res.status(403).json({ message: 'Hesabınız banlı.' });
+      }
+
+      return res.status(200).json({
+        message: 'Giriş başarılı.',
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          address: user.address || {},
+          phone: user.phone || '',
+        },
       });
-      await user.save();
-    }
+    } else if (provider === 'apple') {
+      // Apple kimlik doğrulaması
+      if (!idToken) {
+        return res.status(400).json({ message: 'Apple idToken eksik.' });
+      }
 
-    if (user.isBanned) {
-      return res.status(403).json({ message: 'Hesabınız banlı.' });
-    }
+      // Token’ı decode et (güvenli doğrulama için apple-signin-auth kullanabilirsiniz)
+      const decoded = jwt.decode(idToken, { complete: true });
+      const appleEmail = decoded?.payload?.email || bodyEmail;
+      const appleSub = decoded?.payload?.sub;
+      if (!appleEmail || !appleSub) {
+        return res.status(400).json({ message: 'Apple kimlik doğrulaması başarısız.' });
+      }
 
-    return res.status(200).json({
-      message: 'Giriş başarılı.',
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        address: user.address || {},
-        phone: user.phone || '',
-      },
-    });
+      // Kullanıcıyı bul veya oluştur
+      let user = await User.findOne({ email: appleEmail });
+      if (!user) {
+        user = new User({
+          name: bodyName || '', // Apple adı sadece ilk girişte gelebilir
+          email: appleEmail,
+          appleId: appleSub,
+          role: 'buyer',
+        });
+        await user.save();
+      }
+
+      if (user.isBanned) {
+        return res.status(403).json({ message: 'Hesabınız banlı.' });
+      }
+
+      return res.status(200).json({
+        message: 'Giriş başarılı.',
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          address: user.address || {},
+          phone: user.phone || '',
+        },
+      });
+    } else {
+      // Desteklenmeyen sağlayıcı
+      return res.status(400).json({ message: 'Desteklenmeyen sağlayıcı.' });
+    }
   } catch (err) {
     console.error('❌ Sosyal giriş hatası:', err.response?.data || err.message || err);
     return res.status(500).json({ message: 'Sunucu hatası.', error: err.message });
   }
 };
-
 
 // Profil Güncelleme
 exports.updateProfile = async (req, res) => {

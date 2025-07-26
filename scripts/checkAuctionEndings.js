@@ -41,10 +41,12 @@ async function runCron() {
         const user = await User.findById(highestBid.user);
         if (user?.notificationToken) {
   await sendExpoPushNotification(
-    user.notificationToken,
-    'Mezatı Kazandınız!',
-    'Tebrikler! 48 saat içinde dekont yüklemeniz gerekiyor.'
-  );
+  user.notificationToken,
+  'Mezatı Kazandınız!',
+  'Tebrikler! 48 saat içinde dekont yüklemeniz gerekiyor.',
+  { type: 'auction_won', auctionId: auction._id.toString() },
+  user._id
+);
         }
       } else {
         await auction.save();

@@ -21,7 +21,7 @@ if (auction.seller?.notificationToken) {
     auction.seller.notificationToken,
     'Mezatınız kaldırıldı',
     `Bir mezatınız silindi. Sebep: ${reason}`,
-    { type: 'auction_deleted', auctionId, reason }
+    { type: 'auction_deleted', auctionId, reason },user._id
   );
 }
     // Mezatı sil

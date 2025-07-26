@@ -54,7 +54,7 @@ async function runBanCheck() {
     {
       type: 'ban',
       userId: user._id.toString(),
-    }
+    },user._id
   );
   console.log(`📩 Push bildirimi gönderildi → ${user.email || user._id}`);
 } else {
