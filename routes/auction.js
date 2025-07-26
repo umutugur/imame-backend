@@ -5,7 +5,7 @@ const multer = require('multer');
 const { storage } = require('../config/cloudinary');
 const upload = multer({ storage });
 const calculateEndsAt = require('../utils/calculateEndsAt'); // ✅ yeni eklendi
-
+const User = require('../models/User');
 // ✅ Mezat ekleme (usta imzalı ve fotoğraflı)
 router.post('/', upload.array('images', 5), async (req, res) => {
   try {
