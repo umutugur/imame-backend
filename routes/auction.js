@@ -132,15 +132,23 @@ router.get('/won/:buyerId', async (req, res) => {
   }
 });
 // GET /api/auctions/favorites/:userId
+// ✅ Favori satıcılara ait aktif mezatlar
 router.get('/favorites/:userId', async (req, res) => {
+  const mongoose = require('mongoose');
+
   try {
     const user = await User.findById(req.params.userId);
+
     if (!user || !user.favorites || user.favorites.length === 0) {
       return res.json([]); // Favori yoksa boş dizi
     }
-    // Sadece bitmemiş mezatlar (isEnded: false)
+
+    // 🔐 ObjectId tipini zorla
+    const favoriteIds = user.favorites.map(id => new mongoose.Types.ObjectId(id));
+
+    // 🔍 Sadece aktif mezatlar ve favori satıcılara ait olanlar
     const auctions = await Auction.find({
-      seller: { $in: user.favorites },
+      seller: { $in: favoriteIds },
       isEnded: false,
     })
       .populate('seller', 'companyName name')
@@ -148,7 +156,8 @@ router.get('/favorites/:userId', async (req, res) => {
 
     res.json(auctions);
   } catch (err) {
-    res.status(500).json({ message: 'Favori mezatlar getirilemedi', error: err.message });
+    console.error('Favori mezatlar getirilemedi:', err);
+    res.status(500).json({ message: 'Sunucu hatası', error: err.message });
   }
 });
 // routes/auction.js içinde
