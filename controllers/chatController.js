@@ -1,27 +1,25 @@
 const Chat = require('../models/Chat');
 const Message = require('../models/Message');
 const Auction = require('../models/Auction');
+const User = require('../models/User');
+const { sendExpoPushNotification } = require('../utils/expoPush');
 
 /**
  * ✅ 1) Alıcı için Chat başlat
- * - Alıcı sadece kazandığı mezat için satıcıyla chat başlatabilir
  */
 exports.startChat = async (req, res) => {
   try {
     const { auctionId, buyerId } = req.body;
 
-    // İlgili mezatı bul
     const auction = await Auction.findById(auctionId).populate('seller winner');
     if (!auction) {
       return res.status(404).json({ message: 'Mezat bulunamadı.' });
     }
 
-    // Kazanan kontrolü
     if (!auction.winner || auction.winner._id.toString() !== buyerId) {
       return res.status(403).json({ message: 'Bu mezatı kazanmadınız.' });
     }
 
-    // Zaten chat var mı
     let chat = await Chat.findOne({ auction: auctionId, buyer: buyerId });
     if (!chat) {
       chat = await Chat.create({
@@ -45,9 +43,7 @@ exports.getChat = async (req, res) => {
   try {
     const { chatId } = req.params;
 
-    const chat = await Chat.findById(chatId)
-      .populate('buyer seller auction');
-
+    const chat = await Chat.findById(chatId).populate('buyer seller auction');
     if (!chat) {
       return res.status(404).json({ message: 'Sohbet bulunamadı.' });
     }
@@ -60,20 +56,19 @@ exports.getChat = async (req, res) => {
     res.status(500).json({ message: 'Sunucu hatası.' });
   }
 };
-// Kullanıcıya ait tüm chatleri getir
+
+/**
+ * ✅ 3) Kullanıcının chat listesini getir
+ */
 exports.getUserChats = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // Hem alıcı hem satıcı olarak
     const chats = await Chat.find({
-      $or: [
-        { buyer: userId },
-        { seller: userId }
-      ]
+      $or: [{ buyer: userId }, { seller: userId }]
     })
-    .populate('buyer seller auction')
-    .sort({ updatedAt: -1 });
+      .populate('buyer seller auction')
+      .sort({ updatedAt: -1 });
 
     res.json({ success: true, chats });
   } catch (err) {
@@ -83,32 +78,50 @@ exports.getUserChats = async (req, res) => {
 };
 
 /**
- * ✅ 3) Mesaj gönder
- * - Yetki kontrolü: sadece ilgili buyer veya seller yazabilir
+ * ✅ 4) Mesaj gönder (bildirim dahil)
  */
 exports.sendMessage = async (req, res) => {
   try {
     const { chatId } = req.params;
     const { senderId, text } = req.body;
 
-    // Chat kontrolü
-    const chat = await Chat.findById(chatId);
+    const chat = await Chat.findById(chatId).populate('buyer seller auction');
     if (!chat) {
       return res.status(404).json({ message: 'Sohbet bulunamadı.' });
     }
 
-    // Yetkilendirme kontrolü
-    const allowed = [chat.buyer.toString(), chat.seller.toString()];
+    const allowed = [chat.buyer._id.toString(), chat.seller._id.toString()];
     if (!allowed.includes(senderId)) {
       return res.status(403).json({ message: 'Bu sohbete mesaj gönderemezsiniz.' });
     }
 
-    // Mesaj oluştur
     const message = await Message.create({
       chat: chatId,
       sender: senderId,
       text,
     });
+
+    // Alıcı kim? (karşı taraf)
+    const recipient =
+      senderId === chat.buyer._id.toString() ? chat.seller : chat.buyer;
+
+    // Bildirim gönder
+    if (recipient.notificationToken) {
+      await sendExpoPushNotification(
+        recipient.notificationToken,
+        'Yeni Mesaj',
+        text,
+        {
+          type: 'chat',
+          chatId: chat._id.toString(),
+          otherUserName:
+            senderId === chat.buyer._id.toString()
+              ? chat.buyer.name
+              : chat.seller.name,
+        },
+        recipient._id
+      );
+    }
 
     res.json({ success: true, message });
   } catch (err) {
@@ -118,7 +131,7 @@ exports.sendMessage = async (req, res) => {
 };
 
 /**
- * ✅ 4) Chat ve mesajlarını sil
+ * ✅ 5) Chat ve mesajlarını sil
  */
 exports.deleteChat = async (req, res) => {
   try {
