@@ -64,13 +64,39 @@ exports.getUserChats = async (req, res) => {
   try {
     const { userId } = req.params;
 
+    // Sohbetleri al
     const chats = await Chat.find({
       $or: [{ buyer: userId }, { seller: userId }]
     })
       .populate('buyer seller auction')
-      .sort({ updatedAt: -1 });
+      .sort({ updatedAt: -1 })
+      .lean(); // lean() kullanıyoruz çünkü veri üzerinde işlem yapacağız
 
-    res.json({ success: true, chats });
+    // Chat ID'lerini topla
+    const chatIds = chats.map(chat => chat._id);
+
+    // Unread mesajları çek
+    const unreadMessages = await Message.find({
+      chat: { $in: chatIds },
+      sender: { $ne: userId },     // Karşı taraf göndermiş olacak
+      isRead: false
+    }).lean();
+
+    // Chat ID -> unread count map’i oluştur
+    const unreadMap = {};
+    unreadMessages.forEach(msg => {
+      const id = msg.chat.toString();
+      unreadMap[id] = (unreadMap[id] || 0) + 1;
+    });
+
+    // Her sohbete unreadMessages alanı ekle
+    const chatsWithUnread = chats.map(chat => ({
+      ...chat,
+      unreadMessages: unreadMap[chat._id.toString()] || 0
+    }));
+
+    res.json({ success: true, chats: chatsWithUnread });
+
   } catch (err) {
     console.error('❌ Kullanıcının chatleri alınamadı:', err);
     res.status(500).json({ message: 'Sunucu hatası.' });
