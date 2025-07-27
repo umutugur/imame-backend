@@ -15,6 +15,7 @@ const chatRoutes = require('./routes/chatRoutes');
 const userNotificationsRoutes = require('./routes/userNotifications');
 const ratingRoutes = require('./routes/rating');
 const reportRoutes = require('./routes/report');
+const messageRoutes = require('./routes/message');
 
 // ✅ Models & Helpers for Cron Endpoints
 const Auction = require('./models/Auction');
@@ -40,6 +41,7 @@ app.use('/api/chats', chatRoutes);
 app.use('/api/user-notifications', userNotificationsRoutes);
 app.use('/api/ratings', ratingRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/messages', messageRoutes);
 
 // ✅ Test route
 app.get('/', (req, res) => {
