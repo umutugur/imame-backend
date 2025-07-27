@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const Message = require('../models/Message');
+const Chat = require('../models/Chat');
 
 /**
  * ✅ Belirli bir kullanıcı için okunmamış mesaj sayısını getir
@@ -10,9 +11,16 @@ router.get('/unread-count/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // Kullanıcının alıcı olduğu mesajlar (henüz okunmamış ve kullanıcı gönderici değil)
+    // Kullanıcının yer aldığı chatleri bul
+    const chats = await Chat.find({
+      $or: [{ buyer: userId }, { seller: userId }],
+    });
+
+    const chatIds = chats.map(chat => chat._id);
+
     const unreadCount = await Message.countDocuments({
-      sender: { $ne: userId },
+      chat: { $in: chatIds },
+      sender: { $ne: userId }, // kullanıcı göndermemiş
       isRead: false,
     });
 
