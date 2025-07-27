@@ -30,5 +30,17 @@ router.get('/unread-count/:userId', async (req, res) => {
     res.status(500).json({ message: 'Sunucu hatası.' });
   }
 });
+router.patch('/mark-as-read', async (req, res) => {
+  const { chatId, userId } = req.body;
 
+  try {
+    await Message.updateMany(
+      { chat: chatId, sender: { $ne: userId }, isRead: false },
+      { $set: { isRead: true } }
+    );
+    res.status(200).json({ message: 'Mesajlar okundu olarak işaretlendi' });
+  } catch (err) {
+    res.status(500).json({ message: 'Güncelleme hatası', error: err.message });
+  }
+});
 module.exports = router;
