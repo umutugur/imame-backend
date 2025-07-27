@@ -48,6 +48,19 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({ message: 'Sunucu hatası' });
   }
 });
+// Kullanıcının Expo push token'ını temizle
+router.post('/remove-token', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ message: "userId gerekli" });
+
+    await User.findByIdAndUpdate(userId, { $unset: { notificationToken: "" } });
+    res.status(200).json({ message: "Token başarıyla silindi" });
+  } catch (err) {
+    res.status(500).json({ message: "Token silinirken hata oluştu", error: err.message });
+  }
+});
+
 
 
 module.exports = router;
