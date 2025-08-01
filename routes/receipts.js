@@ -22,7 +22,13 @@ router.get('/mine/:sellerId', async (req, res) => {
       .sort({ endsAt: -1 })
       .select('title receiptUrl receiptStatus winner endsAt');
 
-    res.status(200).json(auctions);
+    // 🔁 frontend için winner'ı buyer olarak yeniden adlandır
+    const withBuyerAlias = auctions.map((a) => ({
+      ...a.toObject(),
+      buyer: a.winner,
+    }));
+
+    res.status(200).json(withBuyerAlias);
   } catch (err) {
     res.status(500).json({ message: 'Sunucu hatası', error: err.message });
   }
