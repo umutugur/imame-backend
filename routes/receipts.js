@@ -18,7 +18,7 @@ router.get('/mine/:sellerId', async (req, res) => {
       isEnded: true,
       receiptUploaded: true,
     })
-      .populate('winner', 'name email')
+      .populate('winner', 'name email address phone')
       .sort({ endsAt: -1 })
       .select('title receiptUrl receiptStatus winner endsAt');
 
