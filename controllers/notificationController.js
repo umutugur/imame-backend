@@ -1,7 +1,6 @@
+// controllers/notificationController.js
 const User = require('../models/User');
-
-// Artık firebaseAdmin import edilmiyor:
-// const admin = require('../utils/firebaseAdmin');  // <-- silinmeli
+const fetch = require('node-fetch');
 
 exports.sendPushNotification = async (req, res) => {
   const { title, message, toAllBuyers, toAllSellers, email } = req.body;
@@ -10,9 +9,22 @@ exports.sendPushNotification = async (req, res) => {
     let users = [];
 
     if (email) {
-      const user = await User.findOne({ email });
-      if (user && user.notificationToken) users.push(user);
+      // Trim ve küçük harfe çevirme ile arama yap
+      const user = await User.findOne({ email: email.trim().toLowerCase() });
+
+      // Kullanıcı bulunamadıysa
+      if (!user) {
+        return res.status(404).json({ message: 'Seçili kullanıcı bulunamadı.' });
+      }
+
+      // Kullanıcının token’ı yoksa
+      if (!user.notificationToken) {
+        return res.status(404).json({ message: 'Seçili kullanıcı için push bildirimi mevcut değil.' });
+      }
+
+      users.push(user);
     } else {
+      // toAllBuyers veya toAllSellers true ise, rol filtrelemesi
       const roles = [];
       if (toAllBuyers) roles.push('buyer');
       if (toAllSellers) roles.push('seller');
@@ -25,10 +37,9 @@ exports.sendPushNotification = async (req, res) => {
       }
     }
 
+    // Hiç kullanıcı yoksa
     if (users.length === 0) {
-      return res
-        .status(404)
-        .json({ message: 'Bildirim gönderilecek kullanıcı bulunamadı.' });
+      return res.status(404).json({ message: 'Bildirim gönderilecek kullanıcı bulunamadı.' });
     }
 
     // Expo’ya toplu push mesajı
@@ -53,8 +64,6 @@ exports.sendPushNotification = async (req, res) => {
     res.status(200).json({ message: 'Bildirim(ler) gönderildi', result });
   } catch (err) {
     console.error('Bildirim gönderme hatası:', err);
-    res
-      .status(500)
-      .json({ message: 'Sunucu hatası', error: err.message });
+    res.status(500).json({ message: 'Sunucu hatası', error: err.message });
   }
 };
