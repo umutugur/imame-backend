@@ -28,7 +28,7 @@ exports.register = async (req, res) => {
   }
 };
 
-// Normal Giriş
+// Normal Giriş (👉 satıcı paneli için JWT burada üretiliyor)
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -40,8 +40,16 @@ exports.login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: 'Hatalı şifre.' });
 
-    res.status(200).json({
+    // 🔑 JWT: sadece normal login’de
+    const token = jwt.sign(
+      { id: user._id.toString(), role: user.role, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.status(200).json({
       message: 'Giriş başarılı.',
+      token, // 👈 seller panel bunu kullanıyor
       user: {
         _id: user._id,
         name: user.name,
@@ -56,23 +64,20 @@ exports.login = async (req, res) => {
   }
 };
 
-// Sosyal Giriş (Google veya Apple)
+// Sosyal Giriş (Google veya Apple) — 👉 token YOK (isteğin doğrultusunda)
 exports.socialLogin = async (req, res) => {
   const { provider, accessToken, idToken, email: bodyEmail, name: bodyName } = req.body;
 
   try {
     if (provider === 'google') {
-      // Google kimlik doğrulaması
       let googleUser = null;
 
       if (idToken) {
-        // idToken varsa Google tokeninfo endpointi ile doğrula
         const response = await axios.get(
           `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
         );
         googleUser = response.data;
       } else if (accessToken) {
-        // accessToken varsa userinfo endpointinden kullanıcı bilgilerini al
         const response = await axios.get(
           `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${accessToken}`
         );
@@ -86,7 +91,6 @@ exports.socialLogin = async (req, res) => {
         return res.status(400).json({ message: 'Email bilgisi alınamadı.' });
       }
 
-      // Kullanıcıyı bul veya oluştur
       let user = await User.findOne({ email });
       if (!user) {
         user = new User({
@@ -114,12 +118,10 @@ exports.socialLogin = async (req, res) => {
         },
       });
     } else if (provider === 'apple') {
-      // Apple kimlik doğrulaması
       if (!idToken) {
         return res.status(400).json({ message: 'Apple idToken eksik.' });
       }
 
-      // Token’ı decode et (güvenli doğrulama için apple-signin-auth kullanabilirsiniz)
       const decoded = jwt.decode(idToken, { complete: true });
       const appleEmail = decoded?.payload?.email || bodyEmail;
       const appleSub = decoded?.payload?.sub;
@@ -127,11 +129,10 @@ exports.socialLogin = async (req, res) => {
         return res.status(400).json({ message: 'Apple kimlik doğrulaması başarısız.' });
       }
 
-      // Kullanıcıyı bul veya oluştur
       let user = await User.findOne({ email: appleEmail });
       if (!user) {
         user = new User({
-          name: bodyName || '', // Apple adı sadece ilk girişte gelebilir
+          name: bodyName || '',
           email: appleEmail,
           appleId: appleSub,
           role: 'buyer',
@@ -142,14 +143,10 @@ exports.socialLogin = async (req, res) => {
       if (user.isBanned) {
         return res.status(403).json({ message: 'Hesabınız banlı.' });
       }
-      const token = jwt.sign(
-  { id: user._id.toString(), role: user.role, email: user.email },
-  process.env.JWT_SECRET,
-  { expiresIn: '7d' }
-);
+
+      // ❌ Burada token üretmiyoruz (istenmedi)
       return res.status(200).json({
         message: 'Giriş başarılı.',
-        token,
         user: {
           _id: user._id,
           name: user.name,
@@ -160,7 +157,6 @@ exports.socialLogin = async (req, res) => {
         },
       });
     } else {
-      // Desteklenmeyen sağlayıcı
       return res.status(400).json({ message: 'Desteklenmeyen sağlayıcı.' });
     }
   } catch (err) {
