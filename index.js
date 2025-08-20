@@ -38,9 +38,6 @@ app.use(cors());
 app.use(express.json({ limit: '2mb' })); // JSON body limiti
 app.use(express.urlencoded({ extended: true }));
 
-// Panelin statik dosyaları (gerekirse görsel/asset koyarsan)
-const path = require('path');
-app.use('/seller-assets', express.static(path.join(__dirname, 'seller')));
 
 // ───────────────────────────────────────────────────────────────
 // API Routes
