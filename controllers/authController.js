@@ -142,9 +142,14 @@ exports.socialLogin = async (req, res) => {
       if (user.isBanned) {
         return res.status(403).json({ message: 'Hesabınız banlı.' });
       }
-
+      const token = jwt.sign(
+  { id: user._id.toString(), role: user.role, email: user.email },
+  process.env.JWT_SECRET,
+  { expiresIn: '7d' }
+);
       return res.status(200).json({
         message: 'Giriş başarılı.',
+        token,
         user: {
           _id: user._id,
           name: user.name,

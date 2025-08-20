@@ -11,6 +11,7 @@ const {
   getFavoriteSellers,
   toggleFavoriteSeller,
 } = require('../controllers/userController');
+const User = require('../models/User');
 
 router.post('/toggle-favorite', toggleFavoriteSeller);
 // 🔐 Tüm kullanıcıları listele (admin)

@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>İmame – Satıcı Paneli</title>
+<style>
+  body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#f6f7fb;margin:0;padding:24px;color:#111827}
+  .wrap{max-width:1100px;margin:0 auto}
+  .card{background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.06);padding:20px}
+  h1{margin:0 0 12px}
+  nav{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 16px}
+  button.tab{border:0;padding:10px 14px;border-radius:10px;background:#eef2ff;color:#3730a3;cursor:pointer;font-weight:700}
+  button.tab.active{background:#7c3aed;color:#fff}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  label{font-weight:600;font-size:14px;margin-bottom:6px;display:block}
+  input,textarea,select{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;background:#fcfcfd}
+  textarea{min-height:100px}
+  .preview{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .preview img{width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid #e5e7eb}
+  .list{display:grid;gap:10px;margin-top:10px}
+  .item{display:flex;gap:12px;align-items:center;background:#fafafa;border:1px solid #eee;border-radius:12px;padding:10px}
+  .item img{width:64px;height:64px;border-radius:8px;object-fit:cover}
+  .right{margin-left:auto;display:flex;gap:8px}
+  .ok{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;padding:10px;border-radius:10px}
+  .err{background:#fef2f2;color:#991b1b;border:1px solid #fecaca;padding:10px;border-radius:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>İmame – Satıcı Paneli</h1>
+
+    <!-- Login -->
+    <div id="loginView">
+      <div class="row">
+        <div><label>E-posta</label><input id="email" /></div>
+        <div><label>Şifre</label><input id="password" type="password" /></div>
+      </div>
+      <div style="margin-top:10px"><button class="tab" id="loginBtn">Giriş Yap</button></div>
+      <div id="msg"></div>
+    </div>
+
+    <!-- App -->
+    <div id="appView" style="display:none">
+      <div id="profileBox" class="ok" style="margin-bottom:10px"></div>
+      <nav>
+        <button class="tab active" data-tab="add">Mezat Ekle</button>
+        <button class="tab" data-tab="mine">Mezatlarım</button>
+        <button class="tab" data-tab="receipts">Dekont Onayla</button>
+      </nav>
+
+      <!-- Mezat Ekle -->
+      <section id="tab-add">
+        <div class="row">
+          <div><label>Başlık</label><input id="title" placeholder="Örn: Usta imzalı ..." /></div>
+          <div><label>Başlangıç Fiyatı (₺)</label><input id="startingPrice" type="number" min="0" step="1" /></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Usta İmzalı</label>
+            <select id="isSigned"><option value="false">Hayır</option><option value="true">Evet</option></select>
+          </div>
+          <div><label>Bitiş Saati</label><input disabled value="Her gün 22:00 (otomatik)" /></div>
+        </div>
+        <div style="margin-top:10px">
+          <label>Açıklama</label>
+          <textarea id="description" placeholder="- Taş: …&#10;- Ölçüler: …&#10;- Usta: …"></textarea>
+        </div>
+        <div style="margin-top:10px">
+          <label>Görseller (max 5)</label>
+          <input id="images" type="file" accept="image/*" multiple />
+          <div id="prev" class="preview"></div>
+        </div>
+        <div style="margin-top:10px"><button class="tab" id="createBtn">Mezatı Kaydet (bitiş: bugün/yarın 22:00)</button></div>
+        <div id="out-add" style="margin-top:10px"></div>
+      </section>
+
+      <!-- Mezatlarım -->
+      <section id="tab-mine" style="display:none">
+        <div class="list" id="mineList"></div>
+      </section>
+
+      <!-- Dekont Onayla -->
+      <section id="tab-receipts" style="display:none">
+        <div class="list" id="receiptList"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+const api = {
+  login: '/api/auth/login',
+  profile: '/api/seller/profile',
+  createAuction: '/api/seller/auctions',
+  myAuctions: '/api/seller/auctions',
+  receiptsMine: (sellerId) => `/receipts/mine/${sellerId}`,
+  approve: (auctionId) => `/receipts/${auctionId}/approve`,
+  reject:  (auctionId) => `/receipts/${auctionId}/reject`,
+};
+
+const $ = id => document.getElementById(id);
+const msg = (el, text, ok=true) => el.innerHTML = `<div class="${ok?'ok':'err'}">${text}</div>`;
+let token = localStorage.getItem('seller_token') || '';
+let sellerId = localStorage.getItem('seller_id') || '';
+
+function setTab(name){
+  document.querySelectorAll('nav .tab').forEach(b => b.classList.toggle('active', b.dataset.tab===name));
+  ['add','mine','receipts'].forEach(t => $('tab-'+t).style.display = (t===name?'block':'none'));
+}
+document.querySelectorAll('nav .tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+
+$('images').addEventListener('change', (e) => {
+  const area = $('prev'); area.innerHTML = '';
+  [...e.target.files].slice(0,5).forEach(f => { const u = URL.createObjectURL(f); const i = new Image(); i.src=u; i.width=96; i.height=96; i.style.borderRadius='10px'; area.appendChild(i); });
+});
+
+$('loginBtn').addEventListener('click', async () => {
+  try {
+    const r = await fetch(api.login, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email: $('email').value.trim(), password: $('password').value })
+    });
+    const j = await r.json();
+    if (!r.ok || !j.token) return msg($('msg'), j.message||'Giriş başarısız', false);
+    if ((j.user && j.user.role) !== 'seller') return msg($('msg'),'Bu panele sadece satıcı girebilir.', false);
+    token = j.token; sellerId = j.user._id;
+    localStorage.setItem('seller_token', token);
+    localStorage.setItem('seller_id', sellerId);
+    $('loginView').style.display='none';
+    $('appView').style.display='block';
+    await loadProfile();
+    await loadMine();
+    await loadReceipts();
+  } catch { msg($('msg'),'Ağ hatası', false); }
+});
+
+async function loadProfile(){
+  const r = await fetch(api.profile, { headers:{ Authorization:'Bearer '+token }});
+  const j = await r.json();
+  if (j.ok) {
+    const u = j.user;
+    $('profileBox').innerHTML = `<b>Hoş geldiniz:</b> ${(u.companyName||u.name||u.email)} &nbsp; • &nbsp; <b>E-posta:</b> ${u.email}`;
+  }
+}
+
+$('createBtn').addEventListener('click', async () => {
+  const out = $('out-add');
+  try {
+    const fd = new FormData();
+    fd.append('title', $('title').value);
+    fd.append('description', $('description').value);
+    fd.append('startingPrice', $('startingPrice').value);
+    fd.append('isSigned', $('isSigned').value);
+    [...$('images').files].slice(0,5).forEach(f => fd.append('images', f));
+    const r = await fetch(api.createAuction, { method:'POST', headers:{ Authorization:'Bearer '+token }, body: fd });
+    const j = await r.json();
+    if (!j.ok) return msg(out, j.message||'Kayıt hatası', false);
+    msg(out, 'Mezat oluşturuldu. ID: '+j.auctionId);
+    ['title','description','startingPrice'].forEach(id => $(id).value=''); $('images').value=''; $('prev').innerHTML='';
+    await loadMine();
+  } catch { msg(out,'Ağ hatası', false); }
+});
+
+async function loadMine(){
+  const box = $('mineList'); box.innerHTML = '';
+  const r = await fetch(api.myAuctions, { headers:{ Authorization:'Bearer '+token }});
+  const j = await r.json();
+  if (!j.ok) return box.innerHTML = '<div class="err">Liste alınamadı</div>';
+  j.items.forEach(a => {
+    const d = document.createElement('div'); d.className='item';
+    const img = document.createElement('img'); img.src = (a.images && a.images[0]) || ''; d.appendChild(img);
+    const info = document.createElement('div');
+    const status = a.isEnded ? `Bitti (${a.receiptStatus||'-'})` : 'Devam ediyor';
+    info.innerHTML = `<b>${a.title}</b><br/>₺${a.currentPrice} • Bitiş: ${new Date(a.endsAt).toLocaleString()} • ${status}`;
+    d.appendChild(info);
+    box.appendChild(d);
+  });
+}
+
+async function loadReceipts(){
+  const box = $('receiptList'); box.innerHTML = '';
+  const r = await fetch(api.receiptsMine(sellerId), { headers:{ Authorization:'Bearer '+token }});
+  if (!r.ok) { box.innerHTML = '<div class="err">Dekont listesi alınamadı</div>'; return; }
+  const items = await r.json();
+  items.forEach(x => {
+    const div = document.createElement('div'); div.className='item';
+    const img = document.createElement('img'); img.src = x.receiptUrl || ''; div.appendChild(img);
+    const info = document.createElement('div');
+    const buyer = x.buyer ? (x.buyer.name || x.buyer.email) : '-';
+    info.innerHTML = `<b>${x.title}</b><br/>Kazanan: ${buyer}<br/>Bitiş: ${new Date(x.endsAt).toLocaleString()}<br/>Durum: ${x.receiptStatus}`;
+    div.appendChild(info);
+    const right = document.createElement('div'); right.className='right';
+    const ok = document.createElement('button'); ok.className='tab'; ok.textContent='Onayla';
+    const no = document.createElement('button'); no.className='tab'; no.textContent='Reddet';
+    ok.onclick = async () => { await fetch(`/receipts/${x._id}/approve`, { method:'PATCH', headers:{ Authorization:'Bearer '+token }}); loadReceipts(); };
+    no.onclick = async () => { await fetch(`/receipts/${x._id}/reject`,  { method:'PATCH', headers:{ Authorization:'Bearer '+token }}); loadReceipts(); };
+    right.appendChild(ok); right.appendChild(no);
+    div.appendChild(right);
+    box.appendChild(div);
+  });
+}
+</script>
+</body>
+</html>
