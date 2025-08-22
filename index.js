@@ -53,6 +53,8 @@ app.use('/api/user-notifications', userNotificationsRoutes);
 app.use('/api/ratings', ratingRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/seller', express.static(path.join(__dirname, 'seller')));
+
 
 // ✅ Satıcı Paneli (WEB) – HTML sayfası + seller API endpoints
 app.use(sellerPanelRoutes);

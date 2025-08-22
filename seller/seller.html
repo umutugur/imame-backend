@@ -172,14 +172,14 @@
     reject:  (auctionId) => `/api/receipts/${auctionId}/reject`,
   };
 
-  // ---- Address JSON paths (senin klasör yapına göre)
+  // ---- Address JSON paths (seller/ altında seller-assets klasörü)
   const ADDR_JSON = {
-    sehir:      '/seller-assets/sehirler.json',
-    ilce:       '/seller-assets/ilceler.json',
-    mahalle_1:  '/seller-assets/mahalleler-1.json',
-    mahalle_2:  '/seller-assets/mahalleler-2.json',
-    mahalle_3:  '/seller-assets/mahalleler-3.json',
-    mahalle_4:  '/seller-assets/mahalleler-4.json',
+    sehir:      'seller-assets/sehirler.json',
+    ilce:       'seller-assets/ilceler.json',
+    mahalle_1:  'seller-assets/mahalleler-1.json',
+    mahalle_2:  'seller-assets/mahalleler-2.json',
+    mahalle_3:  'seller-assets/mahalleler-3.json',
+    mahalle_4:  'seller-assets/mahalleler-4.json',
   };
 
   // ---- State & helpers
@@ -192,41 +192,69 @@
   // Adres haritaları
   const maps = { sehir: new Map(), ilce: new Map(), mahalle: new Map() };
 
-  // Güçlü indeksleme: {idKey'leri} ve {nameKey'leri} dene
-  function indexArray(arr, idKeys, nameKeys, targetMap){
-    if (!Array.isArray(arr)) return;
-    for (const item of arr){
-      let id = null, name = null;
-      for (const k of idKeys){ if (item[k] !== undefined && item[k] !== null) { id = Number(item[k]); break; } }
-      for (const k of nameKeys){ if (item[k]) { name = String(item[k]); break; } }
-      if (id !== null && name) targetMap.set(id, name);
+  /** Objede aday anahtarlardan ilk mevcut olanı döndür */
+  function pick(obj, keys){
+    for (const k of keys){
+      if (obj && Object.prototype.hasOwnProperty.call(obj, k) && obj[k] != null && obj[k] !== '')
+        return obj[k];
     }
+    return undefined;
+  }
+  /** JSON dizi/obje/nested fark etmeksizin id-name çiftlerini topla */
+  function collectIdNamePairs(json, idKeys, nameKeys, out){
+    if (Array.isArray(json)){
+      for (const it of json) collectIdNamePairs(it, idKeys, nameKeys, out);
+      return;
+    }
+    if (json && typeof json === 'object'){
+      const idRaw   = pick(json, idKeys);
+      const nameRaw = pick(json, nameKeys);
+      if (idRaw !== undefined && nameRaw){
+        const id = Number(idRaw);
+        const name = String(nameRaw);
+        if (!Number.isNaN(id)) out.push([id, name]);
+      }
+      for (const v of Object.values(json)) collectIdNamePairs(v, idKeys, nameKeys, out);
+    }
+  }
+  /** Tek bir JSON içeriğini Map'e ekle */
+  function addFromJsonToMap(json, map, idKeys, nameKeys){
+    const pairs = [];
+    collectIdNamePairs(json, idKeys, nameKeys, pairs);
+    for (const [id, name] of pairs) if (!map.has(id)) map.set(id, name);
   }
 
   async function loadAddressMaps(){
-    // Şehirler
     try{
       const s = await (await fetch(ADDR_JSON.sehir)).json();
-      // Olası şema: [{id, name}] veya [{SehirID, SehirAdi}]
-      indexArray(s, ['id','SehirID','sehir_id'], ['name','SehirAdi','sehir_adi','title'], maps.sehir);
-    }catch(e){ console.warn('Şehirler yüklenemedi', e); }
+      addFromJsonToMap(
+        s, maps.sehir,
+        ['id','SehirID','sehir_id','ilId','il_id','SehirNo'],
+        ['name','SehirAdi','sehir_adi','title','ilAdi','il_adi']
+      );
+    }catch(e){ console.warn('Şehirler yüklenemedi:', e); }
 
-    // İlçeler
     try{
       const ic = await (await fetch(ADDR_JSON.ilce)).json();
-      // Olası şema: [{id, name}] | [{IlceID, IlceAdi}] | [{ilce_id, ilce_title}]
-      indexArray(ic, ['id','IlceID','ilce_id'], ['name','IlceAdi','ilce_title','title'], maps.ilce);
-    }catch(e){ console.warn('İlçeler yüklenemedi', e); }
+      addFromJsonToMap(
+        ic, maps.ilce,
+        ['id','IlceID','ilce_id','ilceId'],
+        ['name','IlceAdi','ilce_adi','ilce_title','title']
+      );
+    }catch(e){ console.warn('İlçeler yüklenemedi:', e); }
 
-    // Mahalleler 1-4 birleştir
-    const mahalleFiles = [ADDR_JSON.mahalle_1, ADDR_JSON.mahalle_2, ADDR_JSON.mahalle_3, ADDR_JSON.mahalle_4];
-    for (const file of mahalleFiles){
+    for (const url of [ADDR_JSON.mahalle_1, ADDR_JSON.mahalle_2, ADDR_JSON.mahalle_3, ADDR_JSON.mahalle_4]){
       try{
-        const m = await (await fetch(file)).json();
-        // Olası şema: [{id, name}] | [{MahalleID, MahalleAdi}] | [{mahalle_id, mahalle_title}]
-        indexArray(m, ['id','MahalleID','mahalle_id'], ['name','MahalleAdi','mahalle_title','title'], maps.mahalle);
-      }catch(e){ console.warn('Mahalle parçası yüklenemedi:', file, e); }
+        const m = await (await fetch(url)).json();
+        addFromJsonToMap(
+          m, maps.mahalle,
+          ['id','MahalleID','mahalle_id','mahalleId'],
+          ['name','MahalleAdi','mahalle_adi','mahalle_title','title']
+        );
+      }catch(e){ console.warn('Mahalle dosyası yüklenemedi:', url, e); }
     }
+
+    console.log('Adres haritaları -> Şehir:', maps.sehir.size, 'İlçe:', maps.ilce.size, 'Mahalle:', maps.mahalle.size);
   }
 
   const nameOf = (map, id) => (id==null ? '' : (map.get(Number(id)) || String(id)));
@@ -413,12 +441,6 @@
     }
   }
 
-  async function actReceipt(auctionId, approve){
-    const url = approve ? api.approve(auctionId) : api.reject(auctionId);
-    const r = await fetch(url, { method:'PATCH', headers:{ Authorization:'Bearer '+token }});
-    if (r.ok){ loadReceipts(); } else { alert('İşlem başarısız'); }
-  }
-
   // Sekme geçişinde veri yenile
   document.querySelector('[data-tab="mine"]').addEventListener('click', loadMine);
   document.querySelector('[data-tab="receipts"]').addEventListener('click', loadReceipts);
@@ -431,7 +453,7 @@
       $('appView').style.display='block';
       try{ userCache = JSON.parse(localStorage.getItem('user')||'{}'); }catch{}
       await loadProfile();
-      await loadAddressMaps();   // 👈 boot'ta da yükleyelim
+      await loadAddressMaps();   // 👈 adres haritaları
       await loadMine();
     }
   })();
