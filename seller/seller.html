@@ -245,15 +245,28 @@
   }
 
   // Bugünkü 22:00 (Europe/Istanbul) için UTC epoch (ms)
-  function nextIstanbul2200UtcMs(){
-    const nowUTC = Date.now();
-    const off = istOffsetMin();                  // ~180
-    const istNow = new Date(nowUTC + off*60000); // “İstanbul saati” gibi düşün
-    const target = new Date(istNow); target.setHours(22,0,0,0);
-    if (istNow.getTime() >= target.getTime()) target.setDate(target.getDate()+1);
-    // geri UTC’ye çevir
-    return target.getTime() - off*60000;
+  function nextIstanbul2200UtcMs() {
+  const parts = new Intl.DateTimeFormat('tr-TR', {
+    timeZone: 'Europe/Istanbul',
+    hourCycle: 'h23',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  }).formatToParts(new Date());
+
+  let h = 0, m = 0, s = 0;
+  for (const p of parts) {
+    if (p.type === 'hour')   h = parseInt(p.value, 10);
+    if (p.type === 'minute') m = parseInt(p.value, 10);
+    if (p.type === 'second') s = parseInt(p.value, 10);
   }
+
+  const nowSec    = h * 3600 + m * 60 + s;   // İstanbul saatine göre “şu an”
+  const targetSec = 22 * 3600;               // 22:00:00
+  let leftSec     = targetSec - nowSec;
+  if (leftSec <= 0) leftSec += 24 * 3600;    // günü geçtiyse yarına
+
+  // “şu an”dan itibaren geriye doğru saydırmak için hedef epoch
+  return Date.now() + leftSec * 1000;
+}
 
   // countdown kayıtları
   const timers = []; // {el, target}
