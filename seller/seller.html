@@ -19,7 +19,20 @@
     h1{margin:0 0 12px;font-weight:800;letter-spacing:.2px}
     .brand{display:flex;align-items:center;gap:10px}
     .brand:before{content:"";width:10px;height:28px;border-radius:999px;background:linear-gradient(180deg,var(--altin),#f5e6a0)}
-    .banner{background:#eef7ea;border:1px solid #cde7bf;color:#234b1f;padding:12px 16px;border-radius:12px;margin-bottom:16px}
+
+    .banner{
+      background:#eef7ea;border:1px solid #cde7bf;color:#234b1f;
+      padding:12px 16px;border-radius:12px;margin-bottom:16px;
+      display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+    }
+
+    /* OVERVIEW KPIs */
+    .overview{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:6px 0 18px}
+    .kpi{background:#fff;border:1px solid #eee;border-radius:14px;padding:12px}
+    .kpi-title{font-size:12px;color:#6b7280;font-weight:700;margin-bottom:6px}
+    .kpi-value{font-size:20px;font-weight:900}
+    @media (max-width:900px){.overview{grid-template-columns:repeat(2,1fr)}}
+    @media (max-width:520px){.overview{grid-template-columns:1fr}}
 
     .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
     label{font-weight:600;font-size:14px;margin-bottom:6px;display:block}
@@ -60,6 +73,8 @@
     .modal-card{background:#0b0b0b;border-radius:14px;padding:8px;max-width:95vw;max-height:90vh}
     .modal img{max-width:90vw;max-height:85vh;border-radius:10px;display:block}
     .modal-close{position:absolute;top:20px;right:20px;background:#fff;border:0;border-radius:999px;width:38px;height:38px;font-weight:900;cursor:pointer}
+
+    .timer{font-weight:800}
   </style>
 </head>
 <body>
@@ -87,7 +102,19 @@
 
       <!-- App -->
       <div id="appView" style="display:none">
-        <div id="profileBox" class="banner"></div>
+        <div class="banner">
+          <div id="profileBox"></div>
+          <button class="btn btn-ghost" id="logoutBtn">Çıkış</button>
+        </div>
+
+        <!-- OVERVIEW -->
+        <div class="overview">
+          <div class="kpi"><div class="kpi-title">Bugünkü Satış</div><div class="kpi-value" id="kpi-today">₺0</div></div>
+          <div class="kpi"><div class="kpi-title">Bu Hafta Satış</div><div class="kpi-value" id="kpi-week">₺0</div></div>
+          <div class="kpi"><div class="kpi-title">Bekleyen Dekont</div><div class="kpi-value" id="kpi-pending">0</div></div>
+          <div class="kpi"><div class="kpi-title">Kargoya Hazır</div><div class="kpi-value" id="kpi-approved">0</div></div>
+          <div class="kpi"><div class="kpi-title">Yakında Bitecek (&le;2s)</div><div class="kpi-value" id="kpi-ending">0</div></div>
+        </div>
 
         <nav>
           <button class="tab active" data-tab="add">Mezat Ekle</button>
@@ -189,10 +216,30 @@
   let sellerId = localStorage.getItem('seller_id') || '';
   let userCache = null;
 
+  // caches
+  let mineCache = [];     // /api/seller/auctions
+  let receiptCache = [];  // /api/receipts/mine/:sellerId
+
+  // currency (TR)
+  const fmtTRY = new Intl.NumberFormat('tr-TR', { style:'currency', currency:'TRY', maximumFractionDigits:0 });
+  const IST_TZ = 'Europe/Istanbul';
+  const fmtIST = d => new Date(d).toLocaleString('tr-TR', { timeZone: IST_TZ });
+
+  // İstanbul gün anahtarı
+  const istDayKey = d => new Intl.DateTimeFormat('tr-TR', { timeZone: IST_TZ, year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date(d));
+  const nowIstKey = () => istDayKey(Date.now());
+
+  // Son 7 gün mü?
+  function isWithinLastDays(date, days=7){
+    const now = Date.now();
+    const t = new Date(date).getTime();
+    return t <= now && (now - t) <= days * 86400000;
+  }
+
   // Adres haritaları
   const maps = { sehir: new Map(), ilce: new Map(), mahalle: new Map() };
 
-  /** Objede aday anahtarlardan ilk mevcut olanı döndür */
+  // Helpers for address JSON
   function pick(obj, keys){
     for (const k of keys){
       if (obj && Object.prototype.hasOwnProperty.call(obj, k) && obj[k] != null && obj[k] !== '')
@@ -200,7 +247,6 @@
     }
     return undefined;
   }
-  /** JSON dizi/obje/nested fark etmeksizin id-name çiftlerini topla */
   function collectIdNamePairs(json, idKeys, nameKeys, out){
     if (Array.isArray(json)){
       for (const it of json) collectIdNamePairs(it, idKeys, nameKeys, out);
@@ -217,43 +263,49 @@
       for (const v of Object.values(json)) collectIdNamePairs(v, idKeys, nameKeys, out);
     }
   }
-  /** Tek bir JSON içeriğini Map'e ekle */
   function addFromJsonToMap(json, map, idKeys, nameKeys){
     const pairs = [];
     collectIdNamePairs(json, idKeys, nameKeys, pairs);
     for (const [id, name] of pairs) if (!map.has(id)) map.set(id, name);
   }
 
+  // ---- JSON cache (localStorage, 30 gün)
+  async function cachedFetchJSON(key, url, ttlMs = 1000 * 60 * 60 * 24 * 30){
+    const raw = localStorage.getItem(key);
+    if (raw){
+      try{
+        const obj = JSON.parse(raw);
+        if (Date.now() - obj.t < ttlMs) return obj.d;
+      }catch{}
+    }
+    const d = await (await fetch(url)).json();
+    localStorage.setItem(key, JSON.stringify({ t: Date.now(), d }));
+    return d;
+  }
+
   async function loadAddressMaps(){
     try{
-      const s = await (await fetch(ADDR_JSON.sehir)).json();
-      addFromJsonToMap(
-        s, maps.sehir,
+      const s = await cachedFetchJSON('addr_sehir', ADDR_JSON.sehir);
+      addFromJsonToMap(s, maps.sehir,
         ['id','SehirID','sehir_id','ilId','il_id','SehirNo'],
-        ['name','SehirAdi','sehir_adi','title','ilAdi','il_adi']
-      );
+        ['name','SehirAdi','sehir_adi','title','ilAdi','il_adi']);
     }catch(e){ console.warn('Şehirler yüklenemedi:', e); }
 
     try{
-      const ic = await (await fetch(ADDR_JSON.ilce)).json();
-      addFromJsonToMap(
-        ic, maps.ilce,
+      const ic = await cachedFetchJSON('addr_ilce', ADDR_JSON.ilce);
+      addFromJsonToMap(ic, maps.ilce,
         ['id','IlceID','ilce_id','ilceId'],
-        ['name','IlceAdi','ilce_adi','ilce_title','title']
-      );
+        ['name','IlceAdi','ilce_adi','ilce_title','title']);
     }catch(e){ console.warn('İlçeler yüklenemedi:', e); }
 
-    for (const url of [ADDR_JSON.mahalle_1, ADDR_JSON.mahalle_2, ADDR_JSON.mahalle_3, ADDR_JSON.mahalle_4]){
+    for (const [idx, url] of [ADDR_JSON.mahalle_1, ADDR_JSON.mahalle_2, ADDR_JSON.mahalle_3, ADDR_JSON.mahalle_4].entries()){
       try{
-        const m = await (await fetch(url)).json();
-        addFromJsonToMap(
-          m, maps.mahalle,
+        const m = await cachedFetchJSON('addr_mah_'+(idx+1), url);
+        addFromJsonToMap(m, maps.mahalle,
           ['id','MahalleID','mahalle_id','mahalleId'],
-          ['name','MahalleAdi','mahalle_adi','mahalle_title','title']
-        );
+          ['name','MahalleAdi','mahalle_adi','mahalle_title','title']);
       }catch(e){ console.warn('Mahalle dosyası yüklenemedi:', url, e); }
     }
-
     console.log('Adres haritaları -> Şehir:', maps.sehir.size, 'İlçe:', maps.ilce.size, 'Mahalle:', maps.mahalle.size);
   }
 
@@ -262,6 +314,7 @@
   function setTab(name){
     document.querySelectorAll('nav .tab').forEach(b => b.classList.toggle('active', b.dataset.tab===name));
     ['add','mine','receipts'].forEach(t => $('tab-'+t).style.display = (t===name?'block':'none'));
+    if (name === 'mine') startCountdownTick(); // görünürken sayaçlar aktif
   }
   document.querySelectorAll('nav .tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
 
@@ -281,6 +334,18 @@
   function closeModal(){ imgModal.classList.remove('open'); imgModal.setAttribute('aria-hidden','true'); }
   modalClose.onclick = closeModal;
   imgModal.addEventListener('click', (e) => { if(e.target===imgModal) closeModal(); });
+
+  // ÇIKIŞ
+  function setupLogout(){
+    const btn = $('logoutBtn');
+    if (!btn) return;
+    btn.onclick = () => {
+      localStorage.removeItem('seller_token');
+      localStorage.removeItem('seller_id');
+      localStorage.removeItem('user');
+      location.reload();
+    };
+  }
 
   // LOGIN
   $('loginBtn').addEventListener('click', async () => {
@@ -302,10 +367,12 @@
 
       $('loginView').style.display='none';
       $('appView').style.display='block';
+      setupLogout();
       await loadProfile();
-      await loadAddressMaps();     // 👈 adres haritalarını yükle
+      await loadAddressMaps();
       await loadMine();
       await loadReceipts();
+      refreshOverview();
     } catch {
       msg($('msg'),'Ağ hatası', false);
     }
@@ -341,29 +408,64 @@
       if ($('images')) $('images').value='';
       if (prev) prev.innerHTML='';
       await loadMine();
+      refreshOverview();
     } catch { msg(out,'Ağ hatası', false); }
   });
 
-  // Mezatlarım
+  // Mezatlarım (+ geri sayım)
+  let timerInterval = null;
+  function startCountdownTick(){
+    if (timerInterval) clearInterval(timerInterval);
+    const update = () => {
+      const now = Date.now();
+      document.querySelectorAll('[data-end]').forEach(el=>{
+        const end = Number(el.getAttribute('data-end'));
+        let diff = end - now;
+        if (diff < 0) diff = 0;
+        const hh = String(Math.floor(diff/3600000)).padStart(2,'0');
+        const mm = String(Math.floor((diff%3600000)/60000)).padStart(2,'0');
+        const ss = String(Math.floor((diff%60000)/1000)).padStart(2,'0');
+        el.textContent = `${hh}:${mm}:${ss}`;
+      });
+    };
+    update();
+    timerInterval = setInterval(update, 1000);
+  }
+
   async function loadMine(){
     const box = $('mineList'); if (!box) return; box.innerHTML = '';
     try{
       const r = await fetch(api.myAuctions, { headers:{ Authorization:'Bearer '+token }});
       const j = await r.json();
-      if (!j.ok) return box.innerHTML = '<div class="err">Liste alınamadı</div>';
-      j.items.forEach(a => {
+      if (!j.ok) { box.innerHTML = '<div class="err">Liste alınamadı</div>'; return; }
+      mineCache = Array.isArray(j.items) ? j.items : [];
+
+      mineCache.forEach(a => {
         const d = document.createElement('div'); d.className='item';
         const img = document.createElement('img'); img.src = (a.images && a.images[0]) || ''; img.className='thumb';
         const info = document.createElement('div');
-        const status = a.isEnded ? `Bitti (${a.receiptStatus||'-'})` : 'Devam ediyor';
-        info.innerHTML = `<b>${a.title}</b><br/>₺${a.currentPrice} • Bitiş: ${new Date(a.endsAt).toLocaleString()} • ${status}`;
+
+        const ended = !!a.isEnded;
+        const status = ended ? `Bitti (${a.receiptStatus||'-'})` : 'Devam ediyor';
+        const istEnd = fmtIST(a.endsAt);
+
+        // sayaç elemanı (aktif mezatlar için)
+        const timerSpan = !ended ? `<span class="timer" data-end="${new Date(a.endsAt).getTime()}">--:--:--</span>` : '';
+
+        info.innerHTML = `
+          <b>${a.title}</b><br/>
+          ₺${a.currentPrice} • Bitiş (İstanbul): ${istEnd} • ${status}
+          ${!ended ? `<br/>Kalan süre: ${timerSpan}`:''}
+        `;
         d.appendChild(img); d.appendChild(info);
         box.appendChild(d);
       });
+
+      startCountdownTick();
     }catch{ box.innerHTML = '<div class="err">Liste alınamadı</div>'; }
   }
 
-  // Dekontlar – sellerId ile çağır + adres isimleri
+  // Dekontlar – sellerId ile çağır + adres isimleri + onay/red loading
   async function loadReceipts(){
     const out = $('out-receipts'); const box = $('receiptList'); if (!box) return; box.innerHTML='';
     const sid = sellerId || (JSON.parse(localStorage.getItem('user')||'{}')._id);
@@ -373,11 +475,15 @@
       const r = await fetch(api.receiptsMine(sid), { headers:{ Authorization:'Bearer '+token }});
       if (!r.ok){ msg(out,'Dekont listesi alınamadı', false); return; }
       const items = await r.json(); // array
-      if (!Array.isArray(items) || items.length===0){
-        msg(out,'Gösterilecek dekont bulunamadı', false); return;
+      receiptCache = Array.isArray(items) ? items : [];
+
+      if (receiptCache.length===0){
+        msg(out,'Gösterilecek dekont bulunamadı', false); 
+        refreshOverview();
+        return;
       }
       out.innerHTML = '';
-      items.forEach(x => {
+      receiptCache.forEach(x => {
         const li = document.createElement('div'); li.className='item';
 
         const img = document.createElement('img'); img.src = x.receiptUrl || ''; img.className='thumb';
@@ -389,72 +495,133 @@
         const status = (x.receiptStatus || 'pending').toLowerCase();
         const badgeClass = status==='approved' ? 'badge--approved' : status==='rejected' ? 'badge--rejected' : 'badge--pending';
 
-        let addrHtml = '';
+        // Adres bloğu (sadece approved ise)
+        let fullAddr = '';
+        const addrDiv = document.createElement('div');
         if (status === 'approved' && buyer.address){
           const a = buyer.address;
           const ilName = nameOf(maps.sehir, a.ilId);
           const ilceName = nameOf(maps.ilce, a.ilceId);
           const mahalleName = nameOf(maps.mahalle, a.mahalleId);
-          addrHtml = `
-            <div class="addr">
-              <b>Alıcı Adresi</b><br/>
-              ${mahalleName ? (mahalleName + ', ') : ''}${ilceName ? (ilceName + ', ') : ''}${ilName || ''}<br/>
-              ${[a.sokak, (a.apartmanNo ? 'No: '+a.apartmanNo : ''), (a.daireNo ? 'Daire: '+a.daireNo : '')]
-                .filter(Boolean).join(' • ')}
-            </div>`;
+          fullAddr =
+            `${mahalleName ? (mahalleName+', ') : ''}${ilceName ? (ilceName+', ') : ''}${ilName || ''} • ` +
+            [a.sokak, (a.apartmanNo ? 'No: '+a.apartmanNo : ''), (a.daireNo ? 'Daire: '+a.daireNo : '')]
+              .filter(Boolean).join(' • ');
+          addrDiv.className = 'addr';
+          addrDiv.innerHTML = `<b>Alıcı Adresi</b><br/>${fullAddr}`;
+          const copyBtn = document.createElement('button');
+          copyBtn.className = 'btn btn-ghost';
+          copyBtn.style.marginTop = '8px';
+          copyBtn.textContent = 'Kopyala';
+          copyBtn.onclick = async () => {
+            try{
+              await navigator.clipboard.writeText(fullAddr);
+              const prev = copyBtn.textContent;
+              copyBtn.textContent = 'Kopyalandı ✓';
+              setTimeout(()=> copyBtn.textContent = prev, 1200);
+            }catch{ alert('Kopyalama başarısız'); }
+          };
+          addrDiv.appendChild(document.createElement('br'));
+          addrDiv.appendChild(copyBtn);
         }
 
         info.innerHTML = `
           <b>${x.title}</b><br/>
           Kazanan: ${buyerName}<br/>
-          Bitiş: ${new Date(x.endsAt).toLocaleString()}<br/>
+          Bitiş (İstanbul): ${fmtIST(x.endsAt)}<br/>
           Durum: <span class="badge ${badgeClass}">${status}</span>
-          ${addrHtml}
         `;
+        if (addrDiv.innerHTML) info.appendChild(addrDiv);
 
         const actions = document.createElement('div'); actions.className='right';
         const isPending = status === 'pending';
         const ok = document.createElement('button'); ok.className='btn btn-primary'; ok.textContent='Onayla';
         const no = document.createElement('button'); no.className='btn btn-ghost';  no.textContent='Reddet';
         ok.disabled = !isPending; no.disabled = !isPending;
-        ok.title = isPending ? '' : 'Bu dekont sonuçlanmış';
-        no.title = isPending ? '' : 'Bu dekont sonuçlanmış';
 
         ok.onclick = async () => {
-          if (!isPending) return;
-          const rr = await fetch(api.approve(x._id), { method:'PATCH', headers:{ Authorization:'Bearer '+token }});
-          if (rr.ok) loadReceipts(); else alert('Onay başarısız');
+          if (!isPending || ok.disabled) return;
+          const prevTxt = ok.textContent;
+          ok.disabled = no.disabled = true; ok.textContent = 'Onaylanıyor…';
+          try{
+            const rr = await fetch(api.approve(x._id), { method:'PATCH', headers:{ Authorization:'Bearer '+token }});
+            if (rr.ok) { await loadReceipts(); refreshOverview(); } else { ok.disabled=no.disabled=false; ok.textContent=prevTxt; alert('Onay başarısız'); }
+          }catch{ ok.disabled=no.disabled=false; ok.textContent=prevTxt; alert('Onay başarısız'); }
         };
         no.onclick = async () => {
-          if (!isPending) return;
-          const rr = await fetch(api.reject(x._id),  { method:'PATCH', headers:{ Authorization:'Bearer '+token }});
-          if (rr.ok) loadReceipts(); else alert('Reddetme başarısız');
+          if (!isPending || no.disabled) return;
+          const prevTxt = no.textContent;
+          ok.disabled = no.disabled = true; no.textContent = 'Reddediliyor…';
+          try{
+            const rr = await fetch(api.reject(x._id),  { method:'PATCH', headers:{ Authorization:'Bearer '+token }});
+            if (rr.ok) { await loadReceipts(); refreshOverview(); } else { ok.disabled=no.disabled=false; no.textContent=prevTxt; alert('Reddetme başarısız'); }
+          }catch{ ok.disabled=no.disabled=false; no.textContent=prevTxt; alert('Reddetme başarısız'); }
         };
 
         li.appendChild(img); li.appendChild(info); li.appendChild(actions);
         actions.appendChild(ok); actions.appendChild(no);
         box.appendChild(li);
       });
+
+      refreshOverview();
     }catch(e){
       console.error(e);
       msg(out,'Dekont listesi alınamadı', false);
     }
   }
 
+  // OVERVIEW hesaplama (mobil değişmeden çalışır)
+  function refreshOverview(){
+    // Bugünkü & Haftalık satış: onaylanmış ve bitmiş mezatların currentPrice toplamı
+    const todayKey = nowIstKey();
+
+    const approvedEnded = mineCache.filter(a => a.isEnded && (a.receiptStatus||'').toLowerCase()==='approved');
+    const todaySum = approvedEnded
+      .filter(a => istDayKey(a.endsAt) === todayKey)
+      .reduce((s,a)=> s + (Number(a.currentPrice)||0), 0);
+
+    const weekSum = approvedEnded
+      .filter(a => isWithinLastDays(a.endsAt, 7))
+      .reduce((s,a)=> s + (Number(a.currentPrice)||0), 0);
+
+    // Bekleyen dekont ve kargoya hazır: receipts listesinden
+    const pendingCount  = receiptCache.filter(x => (x.receiptStatus||'').toLowerCase()==='pending').length;
+    const approvedCount = receiptCache.filter(x => (x.receiptStatus||'').toLowerCase()==='approved').length;
+
+    // Yakında bitecek (≤ 2 saat içinde bitecek aktif mezatlar)
+    const now = Date.now();
+    const endingSoonCount = mineCache.filter(a => !a.isEnded && (new Date(a.endsAt).getTime() - now) <= 2*60*60*1000 && (new Date(a.endsAt).getTime() - now) > 0).length;
+
+    $('kpi-today').textContent   = fmtTRY.format(todaySum);
+    $('kpi-week').textContent    = fmtTRY.format(weekSum);
+    $('kpi-pending').textContent = String(pendingCount);
+    $('kpi-approved').textContent= String(approvedCount);
+    $('kpi-ending').textContent  = String(endingSoonCount);
+  }
+
   // Sekme geçişinde veri yenile
-  document.querySelector('[data-tab="mine"]').addEventListener('click', loadMine);
-  document.querySelector('[data-tab="receipts"]').addEventListener('click', loadReceipts);
+  document.querySelector('[data-tab="mine"]').addEventListener('click', async ()=>{
+    await loadMine();
+    refreshOverview();
+  });
+  document.querySelector('[data-tab="receipts"]').addEventListener('click', async ()=>{
+    await loadReceipts();
+    refreshOverview();
+  });
 
   // Oturum varsa otomatik devam
   (async function boot(){
     const has = token && sellerId;
+    setupLogout();
     if (has){
       $('loginView').style.display='none';
       $('appView').style.display='block';
       try{ userCache = JSON.parse(localStorage.getItem('user')||'{}'); }catch{}
       await loadProfile();
-      await loadAddressMaps();   // 👈 adres haritaları
+      await loadAddressMaps();
       await loadMine();
+      // receipts sekmesi seçilince yüklenir
+      refreshOverview();
     }
   })();
 </script>
