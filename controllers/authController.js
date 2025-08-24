@@ -186,4 +186,37 @@ exports.socialLogin = async (req, res) => {
     return res.status(500).json({ message: 'Sunucu hatası.', error: err.message });
   }
 };
+// Profil Güncelleme
+exports.updateProfile = async (req, res) => {
+  try {
+    const userId = req.body._id;
+    const { name, surname, phone, address } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ message: 'Kullanıcı ID belirtilmeli.' });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { name, surname, phone, address },
+      { new: true }
+    );
+
+    res.json({
+      message: 'Profil güncellendi',
+      user: {
+        _id: updatedUser._id,
+        name: updatedUser.name,
+        surname: updatedUser.surname,
+        email: updatedUser.email,
+        phone: updatedUser.phone,
+        address: updatedUser.address,
+        role: updatedUser.role,
+      },
+    });
+  } catch (error) {
+    console.error('Profil güncelleme hatası:', error);
+    res.status(500).json({ message: 'Sunucu hatası', error: error.message });
+  }
+};
 

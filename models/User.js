@@ -33,7 +33,7 @@ const userSchema = new mongoose.Schema(
     googleId: { type: String, unique: true, sparse: true, index: true },
     appleId:  { type: String, unique: true, sparse: true, index: true },
     // Eğer facebook da kullanacaksan aç:
-    // facebookId: { type: String, unique: true, sparse: true, index: true },
+    facebookId: { type: String, unique: true, sparse: true, index: true },
 
     avatar: String,
 
