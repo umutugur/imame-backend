@@ -2,6 +2,7 @@ const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
+const { verifyAppleIdToken } = require('../helpers/verifyAppleIdToken');
 
 // Kullanıcı Kaydı
 exports.register = async (req, res) => {
@@ -117,25 +118,46 @@ exports.socialLogin = async (req, res) => {
           phone: user.phone || '',
         },
       });
-    } else if (provider === 'apple') {
+    }
+
+    // --- APPLE ---
+    if (provider === 'apple') {
       if (!idToken) {
         return res.status(400).json({ message: 'Apple idToken eksik.' });
       }
 
-      const decoded = jwt.decode(idToken, { complete: true });
-      const appleEmail = decoded?.payload?.email || bodyEmail;
-      const appleSub = decoded?.payload?.sub;
-      if (!appleEmail || !appleSub) {
+      // 1) Tokenı DOĞRULA
+      let payload;
+      try {
+        payload = await verifyAppleIdToken(idToken);
+      } catch (e) {
+        console.error('❌ Apple token verify error:', e);
+        return res.status(401).json({ message: 'Apple kimlik doğrulaması başarısız.' });
+      }
+
+      const appleSub = payload?.sub;
+      const appleEmail = payload?.email || bodyEmail || null;
+
+      if (!appleSub) {
         return res.status(400).json({ message: 'Apple kimlik doğrulaması başarısız.' });
       }
 
-      let user = await User.findOne({ email: appleEmail });
+      // 2) Kullanıcıyı email **veya** appleId ile ara
+      const orQuery = [{ appleId: appleSub }];
+      if (appleEmail) orQuery.push({ email: appleEmail });
+
+      let user = await User.findOne({ $or: orQuery });
+
+      // 3) Yoksa oluştur (email olmadan da oluşturabil)
       if (!user) {
         user = new User({
           name: bodyName || '',
-          email: appleEmail,
+          email: appleEmail || undefined, // şema opsiyonel ise undefined bırak
           appleId: appleSub,
           role: 'buyer',
+          // Aşağıdakiler şemada yoksa eklemeden önce schema’ya ilave et
+          // emailMissing: !appleEmail,
+          // loginProvider: 'apple',
         });
         await user.save();
       }
@@ -144,57 +166,24 @@ exports.socialLogin = async (req, res) => {
         return res.status(403).json({ message: 'Hesabınız banlı.' });
       }
 
-      // ❌ Burada token üretmiyoruz (istenmedi)
       return res.status(200).json({
         message: 'Giriş başarılı.',
         user: {
           _id: user._id,
           name: user.name,
-          email: user.email,
+          email: user.email || '',
           role: user.role,
           address: user.address || {},
           phone: user.phone || '',
         },
       });
-    } else {
-      return res.status(400).json({ message: 'Desteklenmeyen sağlayıcı.' });
     }
+
+    // Desteklenmeyen sağlayıcı
+    return res.status(400).json({ message: 'Desteklenmeyen sağlayıcı.' });
   } catch (err) {
     console.error('❌ Sosyal giriş hatası:', err.response?.data || err.message || err);
     return res.status(500).json({ message: 'Sunucu hatası.', error: err.message });
   }
 };
 
-// Profil Güncelleme
-exports.updateProfile = async (req, res) => {
-  try {
-    const userId = req.body._id;
-    const { name, surname, phone, address } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ message: 'Kullanıcı ID belirtilmeli.' });
-    }
-
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      { name, surname, phone, address },
-      { new: true }
-    );
-
-    res.json({
-      message: 'Profil güncellendi',
-      user: {
-        _id: updatedUser._id,
-        name: updatedUser.name,
-        surname: updatedUser.surname,
-        email: updatedUser.email,
-        phone: updatedUser.phone,
-        address: updatedUser.address,
-        role: updatedUser.role,
-      },
-    });
-  } catch (error) {
-    console.error('Profil güncelleme hatası:', error);
-    res.status(500).json({ message: 'Sunucu hatası', error: error.message });
-  }
-};
