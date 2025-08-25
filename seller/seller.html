@@ -57,12 +57,13 @@
     .copy-btn{margin-top:8px}
 
     /* OVERVIEW */
-    .overview{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:6px 0 18px}
+    .overview{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:6px 0 18px}
     .kpi{background:#fff;border:1px solid #eee;border-radius:14px;padding:14px}
     .kpi .t{font-size:12px;color:#6b7280}
     .kpi .v{font-size:22px;font-weight:800;margin-top:4px}
     .kpi .s{font-size:12px;color:#6b7280;margin-top:2px}
-    @media (max-width:900px){ .overview{grid-template-columns:repeat(2,1fr);} }
+    @media (max-width:1100px){ .overview{grid-template-columns:repeat(3,1fr);} }
+    @media (max-width:700px){ .overview{grid-template-columns:repeat(2,1fr);} }
   </style>
 </head>
 <body>
@@ -105,6 +106,11 @@
             <div class="s">Pzt 00:00 – şimdi</div>
           </div>
           <div class="kpi">
+            <div class="t">Geçen Hafta Satış</div>
+            <div class="v" id="kpiPrevWeek">₺0</div>
+            <div class="s">Geçen Pzt 00:00 – Bu Pzt 00:00</div>
+          </div>
+          <div class="kpi" id="kpiPendingWrap">
             <div class="t">Bekleyen Dekont</div>
             <div class="v" id="kpiPending">0</div>
             <div class="s">onay/reddet bekliyor</div>
@@ -188,7 +194,6 @@
   </div>
 
 <script>
-  // ---- API endpoints
   const api = {
     login: '/api/auth/login',
     profile: '/api/seller/profile',
@@ -199,7 +204,6 @@
     reject:  (auctionId) => `/api/receipts/${auctionId}/reject`,
   };
 
-  // ---- Address JSON paths (seller/ altında seller-assets klasörü)
   const ADDR_JSON = {
     sehir:      'seller-assets/sehirler.json',
     ilce:       'seller-assets/ilceler.json',
@@ -209,17 +213,14 @@
     mahalle_4:  'seller-assets/mahalleler-4.json',
   };
 
-  // ---- State & helpers
   const $ = id => document.getElementById(id);
   const msg = (el, text, ok=true) => el.innerHTML = `<div class="${ok?'ok':'err'}">${text}</div>`;
   let token = localStorage.getItem('seller_token') || '';
   let sellerId = localStorage.getItem('seller_id') || '';
   let userCache = null;
 
-  // Adres haritaları
   const maps = { sehir: new Map(), ilce: new Map(), mahalle: new Map() };
 
-  /* ---------- UTIL ---------- */
   const fmtTL = n => '₺' + (Number(n||0)).toLocaleString('tr-TR', {maximumFractionDigits:0});
   const toTR = d => new Intl.DateTimeFormat('tr-TR', {
     timeZone:'Europe/Istanbul', year:'numeric', month:'2-digit', day:'2-digit',
@@ -235,79 +236,54 @@
     return `${h}:${m}:${ss}`;
   }
 
-  // Europe/Istanbul ofset dakikası (DST Türkiye’de değişmediği için sabit +180 ama güvenli kalsın)
-  function istOffsetMin(at=new Date()){
-    const s = new Intl.DateTimeFormat('en-US', { timeZone:'Europe/Istanbul', timeZoneName:'shortOffset', hour:'2-digit' }).format(at);
-    const m = s.match(/GMT([+-]\d{1,2})(?::(\d{2}))?/);
-    if(!m) return 180;
-    const h = parseInt(m[1],10); const mm = m[2]?parseInt(m[2],10):0;
-    return h*60 + (h<0?-mm:mm);
-  }
-
-  // Bugünkü 22:00 (Europe/Istanbul) için UTC epoch (ms)
+  // Bugün 22:00 (Europe/Istanbul) hedef epoch (ms)
   function nextIstanbul2200UtcMs() {
-  const parts = new Intl.DateTimeFormat('tr-TR', {
-    timeZone: 'Europe/Istanbul',
-    hourCycle: 'h23',
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
-  }).formatToParts(new Date());
+    const parts = new Intl.DateTimeFormat('tr-TR', {
+      timeZone: 'Europe/Istanbul',
+      hourCycle: 'h23',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }).formatToParts(new Date());
 
-  let h = 0, m = 0, s = 0;
-  for (const p of parts) {
-    if (p.type === 'hour')   h = parseInt(p.value, 10);
-    if (p.type === 'minute') m = parseInt(p.value, 10);
-    if (p.type === 'second') s = parseInt(p.value, 10);
+    let h=0,m=0,s=0;
+    for (const p of parts) {
+      if (p.type === 'hour')   h = parseInt(p.value,10);
+      if (p.type === 'minute') m = parseInt(p.value,10);
+      if (p.type === 'second') s = parseInt(p.value,10);
+    }
+    const nowSec = h*3600 + m*60 + s;
+    let leftSec = 22*3600 - nowSec;
+    if (leftSec <= 0) leftSec += 24*3600;
+    return Date.now() + leftSec*1000;
   }
 
-  const nowSec    = h * 3600 + m * 60 + s;   // İstanbul saatine göre “şu an”
-  const targetSec = 22 * 3600;               // 22:00:00
-  let leftSec     = targetSec - nowSec;
-  if (leftSec <= 0) leftSec += 24 * 3600;    // günü geçtiyse yarına
-
-  // “şu an”dan itibaren geriye doğru saydırmak için hedef epoch
-  return Date.now() + leftSec * 1000;
-}
-
-  // countdown kayıtları
-  const timers = []; // {el, target}
+  const timers = [];
   function registerCountdown(el, targetMs){ timers.push({el, target:targetMs}); }
   function tickTimers(){
     const now = Date.now();
-    for (const t of timers){
-      const left = t.target - now;
-      t.el.textContent = msToHMS(left);
-    }
+    for (const t of timers){ t.el.textContent = msToHMS(t.target - now); }
   }
   setInterval(tickTimers, 1000);
 
-  /** Objede aday anahtarlardan ilk mevcut olanı döndür */
   function pick(obj, keys){
     for (const k of keys){
-      if (obj && Object.prototype.hasOwnProperty.call(obj, k) && obj[k] != null && obj[k] !== '')
-        return obj[k];
+      if (obj && Object.prototype.hasOwnProperty.call(obj, k) && obj[k] != null && obj[k] !== '') return obj[k];
     }
     return undefined;
   }
-  /** JSON dizi/obje/nested fark etmeksizin id-name çiftlerini topla */
   function collectIdNamePairs(json, idKeys, nameKeys, out){
-    if (Array.isArray(json)){
-      for (const it of json) collectIdNamePairs(it, idKeys, nameKeys, out);
-      return;
-    }
+    if (Array.isArray(json)){ for (const it of json) collectIdNamePairs(it, idKeys, nameKeys, out); return; }
     if (json && typeof json === 'object'){
-      const idRaw   = pick(json, idKeys);
+      const idRaw = pick(json, idKeys);
       const nameRaw = pick(json, nameKeys);
       if (idRaw !== undefined && nameRaw){
-        const id = Number(idRaw);
-        const name = String(nameRaw);
+        const id = Number(idRaw), name = String(nameRaw);
         if (!Number.isNaN(id)) out.push([id, name]);
       }
       for (const v of Object.values(json)) collectIdNamePairs(v, idKeys, nameKeys, out);
     }
   }
   function addFromJsonToMap(json, map, idKeys, nameKeys){
-    const pairs = [];
-    collectIdNamePairs(json, idKeys, nameKeys, pairs);
+    const pairs = []; collectIdNamePairs(json, idKeys, nameKeys, pairs);
     for (const [id, name] of pairs) if (!map.has(id)) map.set(id, name);
   }
 
@@ -343,7 +319,6 @@
   }
   document.querySelectorAll('nav .tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
 
-  // Görsel önizleme + modal
   const prev = $('prev'); const imgModal = $('imgModal'); const modalImg = $('modalImg'); const modalClose = $('modalClose');
   $('images')?.addEventListener('change', (e) => {
     if(!prev) return;
@@ -382,8 +357,8 @@
       $('appView').style.display='block';
       await loadProfile();
       await loadAddressMaps();
-      await loadMine();      // KPI’lar burada hesaplanacak
-      await loadReceipts();
+      await loadMine();      // KPI’lar (bugün/hafta/geçen hafta)
+      await loadReceipts();  // Bekleyen dekont KPI
     } catch {
       msg($('msg'),'Ağ hatası', false);
     }
@@ -399,19 +374,13 @@
     }catch{}
   }
 
-  // OVERVIEW: 22:00 countdown başlat
+  // OVERVIEW: 22:00 countdown
   (function boot2200(){
     const el = $('kpi2200');
     if (!el) return;
     let target = nextIstanbul2200UtcMs();
     registerCountdown(el, target);
-    // 0’a düştüğünde ertesi güne ayarla
-    setInterval(() => {
-      if ((target - Date.now()) <= 0){
-        target = nextIstanbul2200UtcMs();
-        el.textContent = msToHMS(target - Date.now());
-      }
-    }, 1000);
+    setInterval(() => { if ((target - Date.now()) <= 0) target = nextIstanbul2200UtcMs(); }, 1000);
   })();
 
   // Mezat Ekle
@@ -431,13 +400,12 @@
 
       msg(out, 'Mezat oluşturuldu. ID: '+j.auctionId);
       ['title','description','startingPrice'].forEach(id => $(id).value='');
-      if ($('images')) $('images').value='';
-      if (prev) prev.innerHTML='';
+      if ($('images')) $('images').value=''; if (prev) prev.innerHTML='';
       await loadMine();
     } catch { msg(out,'Ağ hatası', false); }
   });
 
-  // Mezatlarım (+ kartlarda 22:00/UTC endsAt geri sayım)
+  // Mezatlarım (kartlarda geri sayım KALDIRILDI)
   async function loadMine(){
     const box = $('mineList'); if (!box) return; box.innerHTML = '';
     try{
@@ -445,76 +413,65 @@
       const j = await r.json();
       if (!j.ok) { box.innerHTML = '<div class="err">Liste alınamadı</div>'; return; }
 
-      // KPI hesapları
       calcKpisFromAuctions(j.items||[]);
 
       (j.items||[]).forEach(a => {
         const d = document.createElement('div'); d.className='item';
         const img = document.createElement('img'); img.src = (a.images && a.images[0]) || ''; img.className='thumb';
-
         const info = document.createElement('div');
         const status = a.isEnded ? `Bitti (${a.receiptStatus||'-'})` : 'Devam ediyor';
-
-        // endsAt UTC → Istanbul göster
         const endText = a.endsAt ? toTR(new Date(a.endsAt)) : '-';
-
-        // per-card countdown (endsAt UTC’ye göre)
-        const cd = document.createElement('div');
-        cd.style.fontSize='12px'; cd.style.color='#6b7280';
-        const cdSpan = document.createElement('b'); cdSpan.textContent='--:--:--';
-        cd.append('Kalan: ', cdSpan);
-        if (a.endsAt){
-          registerCountdown(cdSpan, new Date(a.endsAt).getTime());
-        }
-
         info.innerHTML = `<b>${a.title}</b><br/>₺${(a.currentPrice||0)} • Bitiş: ${endText} • ${status}`;
-        d.appendChild(img); d.appendChild(info); d.appendChild(cd);
+        d.appendChild(img); d.appendChild(info);
         box.appendChild(d);
       });
     }catch{ box.innerHTML = '<div class="err">Liste alınamadı</div>'; }
   }
 
-  // KPI’lar: bugün/hafta toplamı ve bekleyen dekont
+  // KPI’lar: bugün/hafta/geçen hafta (sadece APPROVED)
   function calcKpisFromAuctions(items){
-    // zaman aralıklarını Europe/Istanbul’a göre kur
-    const off = istOffsetMin();
-    const nowUTC = Date.now();
-    const istNow = new Date(nowUTC + off*60000);
+    // Europe/Istanbul'da bugün & bu hafta & geçen hafta başlangıçları
+    const tz = 'Europe/Istanbul';
+    const now = new Date();
 
-    const startOfTodayIst = new Date(istNow); startOfTodayIst.setHours(0,0,0,0);
-    const startOfWeekIst  = new Date(startOfTodayIst); // Pazartesi 00:00
-    const day = startOfWeekIst.getDay(); // 0 Pazar, 1 Pazartesi ...
-    const deltaToMon = (day===0 ? -6 : 1 - day); // Pazartesiye geri
-    startOfWeekIst.setDate(startOfWeekIst.getDate() + deltaToMon);
+    // Istanbul “bugün 00:00”
+    const todayParts = new Intl.DateTimeFormat('tr-TR', { timeZone: tz, year:'numeric', month:'2-digit', day:'2-digit' })
+      .formatToParts(now);
+    const y = Number(todayParts.find(p=>p.type==='year').value);
+    const m = Number(todayParts.find(p=>p.type==='month').value)-1;
+    const d = Number(todayParts.find(p=>p.type==='day').value);
+    const startTodayIst = new Date(Date.UTC(y, m, d, 0, 0, 0)); // UTC karşılığı
 
-    const startTodayUTC = startOfTodayIst.getTime() - off*60000;
-    const startWeekUTC  = startOfWeekIst.getTime()  - off*60000;
+    // Hafta başlangıcı (Pazartesi 00:00, Istanbul)
+    const day = new Date(Date.UTC(y, m, d, 12, 0, 0)); // gün kaymasını önlemek için 12:00
+    const wd = new Intl.DateTimeFormat('en-GB', { weekday:'short', timeZone: tz }).format(day); // Mon..Sun
+    const map = {Mon:0,Tue:-1,Wed:-2,Thu:-3,Fri:-4,Sat:-5,Sun:-6};
+    const shift = map[wd] ?? 0;
+    const startWeekIst = new Date(Date.UTC(y, m, d+shift, 0,0,0));
 
-    let today=0, week=0, pending=0;
+    const startPrevWeekIst = new Date(startWeekIst.getTime() - 7*24*3600*1000);
+
+    let today=0, week=0, prevWeek=0;
 
     for (const a of (items||[])){
       if (!a.isEnded) continue;
       const approved = (a.receiptStatus||'').toLowerCase()==='approved';
-      const pendingR = (a.receiptStatus||'').toLowerCase()==='pending';
+      if (!approved) continue;
+
       const price = Number(a.currentPrice||0);
-      const endMs = a.endsAt ? new Date(a.endsAt).getTime() : 0; // UTC ms
+      const endMs = a.endsAt ? new Date(a.endsAt).getTime() : 0;
 
-      if (pendingR) pending++;
-
-      if (approved && endMs >= startTodayUTC){
-        today += price;
-      }
-      if (approved && endMs >= startWeekUTC){
-        week  += price;
-      }
+      if (endMs >= startTodayIst.getTime()) today += price;
+      if (endMs >= startWeekIst.getTime())  week  += price;
+      if (endMs >= startPrevWeekIst.getTime() && endMs < startWeekIst.getTime()) prevWeek += price;
     }
 
     $('kpiToday').textContent = fmtTL(today);
     $('kpiWeek').textContent  = fmtTL(week);
-    $('kpiPending').textContent = pending.toString();
+    $('kpiPrevWeek').textContent = fmtTL(prevWeek);
   }
 
-  // Dekontlar – sellerId ile çağır + adres isimleri ve formatı
+  // Dekontlar – bekleyen say, 0 ise KPI’ı gizle
   async function loadReceipts(){
     const out = $('out-receipts'); const box = $('receiptList'); if (!box) return; box.innerHTML='';
     const sid = sellerId || (JSON.parse(localStorage.getItem('user')||'{}')._id);
@@ -524,10 +481,17 @@
       const r = await fetch(api.receiptsMine(sid), { headers:{ Authorization:'Bearer '+token }});
       if (!r.ok){ msg(out,'Dekont listesi alınamadı', false); return; }
       const items = await r.json();
+
+      // KPI: sadece pending
+      const pendingCount = (items||[]).filter(x => (x.receiptStatus||'').toLowerCase()==='pending').length;
+      $('kpiPending').textContent = String(pendingCount);
+      $('kpiPendingWrap').style.display = pendingCount > 0 ? '' : 'none';
+
       if (!Array.isArray(items) || items.length===0){
         msg(out,'Gösterilecek dekont bulunamadı', false); return;
       }
       out.innerHTML = '';
+
       items.forEach(x => {
         const li = document.createElement('div'); li.className='item';
 
@@ -547,14 +511,11 @@
           const ilceName = nameOf(maps.ilce, a.ilceId);
           const mahalleName = nameOf(maps.mahalle, a.mahalleId);
 
-          // istenen format:
-          // "yıldıztabya mahallesi Ortancalı sokak no:43 Daire:6 Gaziosmanpaşa/İstanbul"
           const mah = (mahalleName||'').toLocaleLowerCase('tr-TR').trim();
           const sok = (a.sokak||'').trim();
           const no  = a.apartmanNo ? ` no:${a.apartmanNo}` : '';
           const dr  = a.daireNo ? ` Daire:${a.daireNo}` : '';
           const son = `${ilceName||''}/${ilName||''}`;
-
           const line = `${mah} mahallesi ${sok}${no}${dr} ${son}`.replace(/\s+/g,' ').trim();
 
           addrHtml = `
@@ -578,8 +539,6 @@
         const ok = document.createElement('button'); ok.className='btn btn-primary'; ok.textContent='Onayla';
         const no = document.createElement('button'); no.className='btn btn-ghost';  no.textContent='Reddet';
         ok.disabled = !isPending; no.disabled = !isPending;
-        ok.title = isPending ? '' : 'Bu dekont sonuçlanmış';
-        no.title = isPending ? '' : 'Bu dekont sonuçlanmış';
 
         ok.onclick = async () => {
           if (!isPending) return;
@@ -602,11 +561,9 @@
     }
   }
 
-  // Sekme geçişinde veri yenile
   document.querySelector('[data-tab="mine"]').addEventListener('click', loadMine);
   document.querySelector('[data-tab="receipts"]').addEventListener('click', loadReceipts);
 
-  // Oturum varsa otomatik devam
   (async function boot(){
     const has = token && sellerId;
     if (has){
@@ -616,6 +573,7 @@
       await loadProfile();
       await loadAddressMaps();
       await loadMine();
+      await loadReceipts();
     }
   })();
 </script>
