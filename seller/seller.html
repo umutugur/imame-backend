@@ -194,6 +194,7 @@
   </div>
 
 <script>
+  /* ==================== API & PATHS ==================== */
   const api = {
     login: '/api/auth/login',
     profile: '/api/seller/profile',
@@ -213,6 +214,7 @@
     mahalle_4:  'seller-assets/mahalleler-4.json',
   };
 
+  /* ==================== STATE & HELPERS ==================== */
   const $ = id => document.getElementById(id);
   const msg = (el, text, ok=true) => el.innerHTML = `<div class="${ok?'ok':'err'}">${text}</div>`;
   let token = localStorage.getItem('seller_token') || '';
@@ -234,6 +236,34 @@
     const m = Math.floor((s%3600)/60).toString().padStart(2,'0');
     const ss= (s%60).toString().padStart(2,'0');
     return `${h}:${m}:${ss}`;
+  }
+
+  // Login/App görünümü
+  function showLogin(reason){
+    $('loginView').style.display='block';
+    $('appView').style.display='none';
+    if (reason) msg($('msg'), reason, false);
+  }
+  function showApp(){
+    $('loginView').style.display='none';
+    $('appView').style.display='block';
+  }
+  function logout(reason){
+    token=''; sellerId=''; userCache=null;
+    localStorage.removeItem('seller_token');
+    localStorage.removeItem('seller_id');
+    localStorage.removeItem('user');
+    showLogin(reason || 'Oturum süreniz doldu. Lütfen tekrar giriş yapın.');
+  }
+  async function apiFetch(url, opts={}){
+    const headers = { ...(opts.headers||{}) };
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const res = await fetch(url, { ...opts, headers });
+    if (res.status === 401 || res.status === 403){
+      logout('Oturum süreniz doldu. Lütfen tekrar giriş yapın.');
+      throw new Error('unauthorized');
+    }
+    return res;
   }
 
   // Bugün 22:00 (Europe/Istanbul) hedef epoch (ms)
@@ -264,6 +294,7 @@
   }
   setInterval(tickTimers, 1000);
 
+  // JSON → Map indeksleme
   function pick(obj, keys){
     for (const k of keys){
       if (obj && Object.prototype.hasOwnProperty.call(obj, k) && obj[k] != null && obj[k] !== '') return obj[k];
@@ -335,7 +366,7 @@
   modalClose.onclick = closeModal;
   imgModal.addEventListener('click', (e) => { if(e.target===imgModal) closeModal(); });
 
-  // LOGIN
+  /* ==================== LOGIN ==================== */
   $('loginBtn').addEventListener('click', async () => {
     try {
       const r = await fetch(api.login, {
@@ -353,8 +384,7 @@
       localStorage.setItem('seller_id', sellerId);
       localStorage.setItem('user', JSON.stringify(j.user));
 
-      $('loginView').style.display='none';
-      $('appView').style.display='block';
+      showApp();
       await loadProfile();
       await loadAddressMaps();
       await loadMine();      // KPI’lar (bugün/hafta/geçen hafta)
@@ -367,10 +397,16 @@
   // Profil
   async function loadProfile(){
     try{
-      const r = await fetch(api.profile, { headers:{ Authorization:'Bearer '+token }});
+      const r = await apiFetch(api.profile);
       const j = await r.json();
       const u = j?.user || userCache || JSON.parse(localStorage.getItem('user')||'{}');
-      $('profileBox').innerHTML = `<b>Hoş geldiniz:</b> ${u.companyName||u.name||u.email} &nbsp; • &nbsp; <b>E-posta:</b> ${u.email}`;
+      $('profileBox').innerHTML = `
+        <b>Hoş geldiniz:</b> ${u.companyName||u.name||u.email}
+        &nbsp; • &nbsp; <b>E-posta:</b> ${u.email}
+        <span style="float:right">
+          <button class="btn btn-ghost" id="logoutBtn">Çıkış</button>
+        </span>`;
+      $('logoutBtn')?.addEventListener('click', () => logout('Oturumdan çıkış yaptınız.'));
     }catch{}
   }
 
@@ -394,7 +430,7 @@
       fd.append('isSigned', $('isSigned').value);
       [...$('images').files].slice(0,5).forEach(f => fd.append('images', f));
 
-      const r = await fetch(api.createAuction, { method:'POST', headers:{ Authorization:'Bearer '+token }, body: fd });
+      const r = await apiFetch(api.createAuction, { method:'POST', body: fd });
       const j = await r.json();
       if (!j.ok) return msg(out, j.message||'Kayıt hatası', false);
 
@@ -402,14 +438,14 @@
       ['title','description','startingPrice'].forEach(id => $(id).value='');
       if ($('images')) $('images').value=''; if (prev) prev.innerHTML='';
       await loadMine();
-    } catch { msg(out,'Ağ hatası', false); }
+    } catch (e) { if (e.message!=='unauthorized') msg(out,'Ağ hatası', false); }
   });
 
   // Mezatlarım (kartlarda geri sayım KALDIRILDI)
   async function loadMine(){
     const box = $('mineList'); if (!box) return; box.innerHTML = '';
     try{
-      const r = await fetch(api.myAuctions, { headers:{ Authorization:'Bearer '+token }});
+      const r = await apiFetch(api.myAuctions);
       const j = await r.json();
       if (!j.ok) { box.innerHTML = '<div class="err">Liste alınamadı</div>'; return; }
 
@@ -425,12 +461,11 @@
         d.appendChild(img); d.appendChild(info);
         box.appendChild(d);
       });
-    }catch{ box.innerHTML = '<div class="err">Liste alınamadı</div>'; }
+    }catch(e){ if (e.message!=='unauthorized') box.innerHTML = '<div class="err">Liste alınamadı</div>'; }
   }
 
   // KPI’lar: bugün/hafta/geçen hafta (sadece APPROVED)
   function calcKpisFromAuctions(items){
-    // Europe/Istanbul'da bugün & bu hafta & geçen hafta başlangıçları
     const tz = 'Europe/Istanbul';
     const now = new Date();
 
@@ -443,12 +478,11 @@
     const startTodayIst = new Date(Date.UTC(y, m, d, 0, 0, 0)); // UTC karşılığı
 
     // Hafta başlangıcı (Pazartesi 00:00, Istanbul)
-    const day = new Date(Date.UTC(y, m, d, 12, 0, 0)); // gün kaymasını önlemek için 12:00
-    const wd = new Intl.DateTimeFormat('en-GB', { weekday:'short', timeZone: tz }).format(day); // Mon..Sun
+    const anchor = new Date(Date.UTC(y, m, d, 12, 0, 0)); // gün kaymasını önlemek için 12:00
+    const wd = new Intl.DateTimeFormat('en-GB', { weekday:'short', timeZone: tz }).format(anchor);
     const map = {Mon:0,Tue:-1,Wed:-2,Thu:-3,Fri:-4,Sat:-5,Sun:-6};
     const shift = map[wd] ?? 0;
     const startWeekIst = new Date(Date.UTC(y, m, d+shift, 0,0,0));
-
     const startPrevWeekIst = new Date(startWeekIst.getTime() - 7*24*3600*1000);
 
     let today=0, week=0, prevWeek=0;
@@ -478,8 +512,7 @@
     if (!sid){ msg(out,'Satıcı ID bulunamadı', false); return; }
 
     try{
-      const r = await fetch(api.receiptsMine(sid), { headers:{ Authorization:'Bearer '+token }});
-      if (!r.ok){ msg(out,'Dekont listesi alınamadı', false); return; }
+      const r = await apiFetch(api.receiptsMine(sid));
       const items = await r.json();
 
       // KPI: sadece pending
@@ -542,12 +575,12 @@
 
         ok.onclick = async () => {
           if (!isPending) return;
-          const rr = await fetch(api.approve(x._id), { method:'PATCH', headers:{ Authorization:'Bearer '+token }});
+          const rr = await apiFetch(api.approve(x._id), { method:'PATCH' });
           if (rr.ok) loadReceipts(); else alert('Onay başarısız');
         };
         no.onclick = async () => {
           if (!isPending) return;
-          const rr = await fetch(api.reject(x._id),  { method:'PATCH', headers:{ Authorization:'Bearer '+token }});
+          const rr = await apiFetch(api.reject(x._id),  { method:'PATCH' });
           if (rr.ok) loadReceipts(); else alert('Reddetme başarısız');
         };
 
@@ -556,21 +589,22 @@
         box.appendChild(li);
       });
     }catch(e){
-      console.error(e);
-      msg(out,'Dekont listesi alınamadı', false);
+      if (e.message!=='unauthorized') msg(out,'Dekont listesi alınamadı', false);
     }
   }
 
   document.querySelector('[data-tab="mine"]').addEventListener('click', loadMine);
   document.querySelector('[data-tab="receipts"]').addEventListener('click', loadReceipts);
 
+  // Boot
   (async function boot(){
     const has = token && sellerId;
     if (has){
-      $('loginView').style.display='none';
-      $('appView').style.display='block';
+      showApp();
       try{ userCache = JSON.parse(localStorage.getItem('user')||'{}'); }catch{}
-      await loadProfile();
+      try{
+        await loadProfile();  // 401 ise apiFetch logout çağırır
+      }catch{ return; }
       await loadAddressMaps();
       await loadMine();
       await loadReceipts();
