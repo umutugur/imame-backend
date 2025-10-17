@@ -21,6 +21,24 @@ exports.getBannedUsers = async (req, res) => {
     res.status(500).json({ message: 'Banlı kullanıcılar alınamadı', error: err.message });
   }
 };
+// Hesabı kalıcı sil (Apple 5.1.1(v))
+exports.deleteMe = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // İsteğe göre: kullanıcıya ait yardımcı verileri de temizleyin
+    await Auction.updateMany({ seller: userId }, { $unset: { seller: "" } });
+    await Bid.deleteMany({ user: userId });
+    // vs.
+
+    await require('../models/User').findByIdAndDelete(userId);
+
+    return res.status(200).json({ message: 'Account deleted' });
+  } catch (err) {
+    console.error('deleteMe error:', err);
+    return res.status(500).json({ message: 'Account deletion failed', error: err.message });
+  }
+};
 
 // 🔹 Kullanıcıyı banla
 exports.banUser = async (req, res) => {

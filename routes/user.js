@@ -32,6 +32,7 @@ router.post('/update-token/test', (req, res) => {
   console.log('TEST ENDPOINT çalıştı!');
   res.json({ message: 'test OK' });
 });
+router.delete('/me', requireAuth(), deleteMe); // 👈 yeni satır
 // Favori satıcı ekle
 router.post('/favorites/add', addFavoriteSeller);
 // Favori satıcı çıkar
