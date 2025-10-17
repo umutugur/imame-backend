@@ -7,6 +7,7 @@ const {
   unbanUser,
   updateNotificationToken, // 👈 ekledik
   addFavoriteSeller,
+  deleteMe,
   removeFavoriteSeller,
   getFavoriteSellers,
   toggleFavoriteSeller,
