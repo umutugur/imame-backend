@@ -18,6 +18,7 @@ const userNotificationsRoutes = require('./routes/userNotifications');
 const ratingRoutes = require('./routes/rating');
 const reportRoutes = require('./routes/report');
 const messageRoutes = require('./routes/message');
+const devicesRoutes = require('./routes/devices');
 
 // ✅ Seller Panel (yeni)
 const sellerPanelRoutes = require('./routes/sellerPanel');
@@ -55,7 +56,7 @@ app.use('/api/ratings', ratingRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/seller', express.static(path.join(__dirname, 'seller')));
-
+app.use('/api/devices', devicesRoutes);
 
 // ✅ Satıcı Paneli (WEB) – HTML sayfası + seller API endpoints
 app.use(sellerPanelRoutes);
