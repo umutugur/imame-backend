@@ -1,7 +1,6 @@
 // controllers/notificationController.js
 const User = require('../models/User');
-// 👇 misafir/cihaz token’ları için Device modelini ekliyoruz
-const Device = require('../models/Device');
+const DeviceToken = require('../models/DeviceToken'); // 👈 DÜZELTME: Device yerine DeviceToken
 const fetch = require('node-fetch');
 
 function chunk(arr, size) {
@@ -27,7 +26,6 @@ exports.sendPushNotification = async (req, res) => {
       if (!user.notificationToken) {
         return res.status(404).json({ message: 'Seçili kullanıcı için push bildirimi mevcut değil.' });
       }
-
       users.push(user);
     } else {
       // Toplu gönderim: roller ve/veya misafir cihazlar
@@ -43,26 +41,25 @@ exports.sendPushNotification = async (req, res) => {
         }).select('notificationToken');
       }
 
-      // Misafir cihazlarını dahil et (checkbox ile kontrol)
-      if (includeGuests) {
-        // Device koleksiyonundan kayıtlı tüm expo token’larını çek
-        const devices = await Device.find({
+      // “Tümünü seç” (alıcı + satıcı) ise misafirleri de otomatik ekle
+      const includeGuestsFinal = !!includeGuests || (toAllBuyers && toAllSellers);
+
+      if (includeGuestsFinal) {
+        // DeviceToken koleksiyonundan kayıtlı tüm expo token’larını çek
+        const devices = await DeviceToken.find({
           token: { $exists: true, $ne: null },
         }).select('token');
         deviceTokens = devices.map((d) => d.token).filter(Boolean);
       }
 
       // Eğer hiçbir hedef seçilmemişse kullanıcıya bilgi ver
-      if (roles.length === 0 && !includeGuests) {
+      if (roles.length === 0 && !includeGuestsFinal) {
         return res.status(400).json({ message: 'Alıcı grubu seçin veya e-posta girin.' });
       }
     }
 
     // Tüm token’ları birleştirip uniq yap
-    const userTokens = users
-      .map((u) => u.notificationToken)
-      .filter(Boolean);
-
+    const userTokens = users.map((u) => u.notificationToken).filter(Boolean);
     const allTokens = Array.from(new Set([...userTokens, ...deviceTokens]));
 
     if (allTokens.length === 0) {
