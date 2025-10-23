@@ -1,67 +1,110 @@
 // controllers/notificationController.js
 const User = require('../models/User');
+// 👇 misafir/cihaz token’ları için Device modelini ekliyoruz
+const Device = require('../models/Device');
 const fetch = require('node-fetch');
 
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 exports.sendPushNotification = async (req, res) => {
-  const { title, message, toAllBuyers, toAllSellers, email } = req.body;
+  const { title, message, toAllBuyers, toAllSellers, email, includeGuests } = req.body;
 
   try {
     let users = [];
+    let deviceTokens = [];
 
     if (email) {
-      // Trim ve küçük harfe çevirme ile arama yap
+      // Tek kullanıcıya gönderim
       const user = await User.findOne({ email: email.trim().toLowerCase() });
 
-      // Kullanıcı bulunamadıysa
       if (!user) {
         return res.status(404).json({ message: 'Seçili kullanıcı bulunamadı.' });
       }
-
-      // Kullanıcının token’ı yoksa
       if (!user.notificationToken) {
         return res.status(404).json({ message: 'Seçili kullanıcı için push bildirimi mevcut değil.' });
       }
 
       users.push(user);
     } else {
-      // toAllBuyers veya toAllSellers true ise, rol filtrelemesi
+      // Toplu gönderim: roller ve/veya misafir cihazlar
       const roles = [];
       if (toAllBuyers) roles.push('buyer');
       if (toAllSellers) roles.push('seller');
 
+      // Rol seçilmişse ilgili kullanıcıların token’larını al
       if (roles.length > 0) {
         users = await User.find({
           role: { $in: roles },
           notificationToken: { $exists: true, $ne: null },
-        });
+        }).select('notificationToken');
+      }
+
+      // Misafir cihazlarını dahil et (checkbox ile kontrol)
+      if (includeGuests) {
+        // Device koleksiyonundan kayıtlı tüm expo token’larını çek
+        const devices = await Device.find({
+          token: { $exists: true, $ne: null },
+        }).select('token');
+        deviceTokens = devices.map((d) => d.token).filter(Boolean);
+      }
+
+      // Eğer hiçbir hedef seçilmemişse kullanıcıya bilgi ver
+      if (roles.length === 0 && !includeGuests) {
+        return res.status(400).json({ message: 'Alıcı grubu seçin veya e-posta girin.' });
       }
     }
 
-    // Hiç kullanıcı yoksa
-    if (users.length === 0) {
-      return res.status(404).json({ message: 'Bildirim gönderilecek kullanıcı bulunamadı.' });
+    // Tüm token’ları birleştirip uniq yap
+    const userTokens = users
+      .map((u) => u.notificationToken)
+      .filter(Boolean);
+
+    const allTokens = Array.from(new Set([...userTokens, ...deviceTokens]));
+
+    if (allTokens.length === 0) {
+      return res.status(404).json({ message: 'Bildirim gönderilecek token bulunamadı.' });
     }
 
-    // Expo’ya toplu push mesajı
-    const messages = users.map((user) => ({
-      to: user.notificationToken,
-      sound: 'default',
-      title,
-      body: message,
-    }));
+    // Expo push: 99-100’lük paketler halinde gönder
+    const batches = chunk(allTokens, 99);
+    const results = [];
 
-    const response = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Accept-encoding': 'gzip, deflate',
-        'Content-Type': 'application/json',
+    for (const batch of batches) {
+      const messages = batch.map((token) => ({
+        to: token,
+        sound: 'default',
+        title,
+        body: message,
+      }));
+
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(messages),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      results.push(result);
+    }
+
+    res.status(200).json({
+      message: 'Bildirim(ler) gönderildi',
+      counts: {
+        totalTokens: allTokens.length,
+        batches: batches.length,
+        userTokens: userTokens.length,
+        guestDeviceTokens: deviceTokens.length,
       },
-      body: JSON.stringify(messages),
+      results,
     });
-
-    const result = await response.json();
-    res.status(200).json({ message: 'Bildirim(ler) gönderildi', result });
   } catch (err) {
     console.error('Bildirim gönderme hatası:', err);
     res.status(500).json({ message: 'Sunucu hatası', error: err.message });
