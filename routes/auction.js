@@ -6,10 +6,14 @@ const { storage } = require('../config/cloudinary');
 const upload = multer({ storage });
 const calculateEndsAt = require('../utils/calculateEndsAt'); // ✅ yeni eklendi
 const User = require('../models/User');
+const { requireAuth } = require('../middlewares/auth');
+
 // ✅ Mezat ekleme (usta imzalı ve fotoğraflı)
-router.post('/', upload.array('images', 5), async (req, res) => {
+router.post('/', requireAuth(['seller', 'admin']), upload.array('images', 5), async (req, res) => {
   try {
-    const { title, description, startingPrice, seller, isSigned } = req.body;
+    const { title, description, startingPrice, isSigned } = req.body;
+    // Satıcı kimliği, admin dışındaki isteklerde her zaman istek sahibinden alınır.
+    const seller = req.user.role === 'admin' ? req.body.seller : req.user.id;
 
     if (!title || !startingPrice || !seller) {
       return res.status(400).json({ message: 'Başlık, fiyat ve satıcı zorunludur.' });
@@ -49,9 +53,12 @@ router.post('/', upload.array('images', 5), async (req, res) => {
 });
 
 // ✅ Satıcının kendi mezatlarını listele
-router.get('/mine/:sellerId', async (req, res) => {
+router.get('/mine/:sellerId', requireAuth(['seller', 'admin']), async (req, res) => {
   try {
     const { sellerId } = req.params;
+    if (req.user.role !== 'admin' && req.user.id !== sellerId) {
+      return res.status(403).json({ message: 'Yetersiz yetki' });
+    }
     const auctions = await Auction.find({ seller: sellerId }).sort({ createdAt: -1 });
     res.status(200).json(auctions);
   } catch (err) {
@@ -114,9 +121,12 @@ router.get('/:id', async (req, res) => {
   }
 });
 // ✅ Alıcının kazandığı bitmiş mezatları getir
-router.get('/won/:buyerId', async (req, res) => {
+router.get('/won/:buyerId', requireAuth(), async (req, res) => {
   try {
     const { buyerId } = req.params;
+    if (req.user.role !== 'admin' && req.user.id !== buyerId) {
+      return res.status(403).json({ message: 'Yetersiz yetki' });
+    }
 
     const auctions = await Auction.find({
       winner: buyerId,
@@ -133,10 +143,13 @@ router.get('/won/:buyerId', async (req, res) => {
 });
 // GET /api/auctions/favorites/:userId
 // ✅ Favori satıcılara ait aktif mezatlar
-router.get('/favorites/:userId', async (req, res) => {
+router.get('/favorites/:userId', requireAuth(), async (req, res) => {
   const mongoose = require('mongoose');
 
   try {
+    if (req.user.role !== 'admin' && req.user.id !== req.params.userId) {
+      return res.status(403).json({ message: 'Yetersiz yetki' });
+    }
     const user = await User.findById(req.params.userId);
 
     if (!user || !user.favorites || user.favorites.length === 0) {
@@ -162,8 +175,11 @@ router.get('/favorites/:userId', async (req, res) => {
 });
 // routes/auction.js içinde
 // GET /api/auctions/won-by/:buyerId/:sellerId
-router.get('/won-by/:buyerId/:sellerId', async (req, res) => {
+router.get('/won-by/:buyerId/:sellerId', requireAuth(), async (req, res) => {
   const { buyerId, sellerId } = req.params;
+  if (req.user.role !== 'admin' && req.user.id !== buyerId) {
+    return res.status(403).json({ message: 'Yetersiz yetki' });
+  }
   // Alıcının kazandığı, bu satıcıya ait mezatlar var mı?
   const count = await Auction.countDocuments({
     seller: sellerId,
@@ -175,7 +191,7 @@ router.get('/won-by/:buyerId/:sellerId', async (req, res) => {
 // routes/auction.js (sonuna ekle)
 const { deleteAuctionWithReason } = require('../controllers/auctionController');
 
-router.post('/delete/:auctionId', deleteAuctionWithReason); // admin yetkisi gerekecek!
+router.post('/delete/:auctionId', requireAuth(), deleteAuctionWithReason); // admin veya mezat sahibi
 
 
 

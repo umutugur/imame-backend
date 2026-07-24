@@ -14,6 +14,12 @@ exports.deleteAuctionWithReason = async (req, res) => {
     const auction = await Auction.findById(auctionId).populate('seller');
     if (!auction) return res.status(404).json({ message: 'Mezat bulunamadı.' });
 
+    // Yetki kontrolü: admin ya da mezatın sahibi olan satıcı
+    const isOwner = auction.seller && auction.seller._id.toString() === req.user?.id;
+    if (req.user?.role !== 'admin' && !isOwner) {
+      return res.status(403).json({ message: 'Yetersiz yetki' });
+    }
+
     // Satıcıya bildirim at
     // controllers/auctionController.js
 if (auction.seller?.notificationToken) {
