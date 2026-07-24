@@ -2,19 +2,41 @@ const express = require('express');
 const router = express.Router();
 const Bid = require('../models/Bid');
 const Auction = require('../models/Auction');
+const User = require('../models/User');
+const { requireAuth } = require('../middlewares/auth');
+const { sendExpoPushNotification } = require('../utils/expoPush');
+
+// Minimum teklif artış kademeleri
+function getMinIncrement(currentPrice) {
+  if (currentPrice < 500) return 25;
+  if (currentPrice < 2000) return 50;
+  if (currentPrice < 5000) return 100;
+  return 250;
+}
 
 // Teklif verme - atomik, tutarlı ve yarışmaları engelleyen versiyon
-router.post('/', async (req, res) => {
+router.post('/', requireAuth(), async (req, res) => {
   try {
-    const { auctionId, userId, amount } = req.body;
-    console.log('TEKLİF BODY:', req.body);
+    const { auctionId, amount } = req.body;
+    const userId = req.user.id;
+    console.log('TEKLİF BODY:', req.body, 'userId:', userId);
 
     // Mezatı ve son fiyatı çek
     const auction = await Auction.findById(auctionId);
     if (!auction) return res.status(404).json({ message: 'Mezat bulunamadı' });
 
-    if (amount <= auction.currentPrice) {
-      return res.status(400).json({ message: 'Teklif mevcut fiyattan yüksek olmalı' });
+    if (auction.isEnded || (auction.endsAt && new Date(auction.endsAt) <= new Date())) {
+      return res.status(400).json({ message: 'Bu mezat sona erdi' });
+    }
+
+    const minIncrement = getMinIncrement(auction.currentPrice);
+    const minNextBid = auction.currentPrice + minIncrement;
+
+    if (amount < minNextBid) {
+      return res.status(400).json({
+        message: `Teklif en az ${minNextBid}₺ olmalı`,
+        minNextBid,
+      });
     }
 
     const lastBid = await Bid.findOne({ auction: auctionId }).sort({ createdAt: -1 });
@@ -41,14 +63,40 @@ router.post('/', async (req, res) => {
 
     console.log(`Yeni teklif verildi: ${updatedAuction.currentPrice} TL, auctionId: ${auctionId}, userId: ${userId}`);
 
-    res.status(201).json({ message: 'Teklif başarıyla verildi', bid: newBid });
+    // Bir önceki en yüksek teklifi verene (farklı bir kullanıcıysa) push bildirim gönder.
+    // Bildirim gönderimi teklifin başarısını asla etkilememeli.
+    (async () => {
+      try {
+        if (lastBid && lastBid.user.toString() !== userId) {
+          const previousUser = await User.findById(lastBid.user).select('notificationToken');
+          if (previousUser && previousUser.notificationToken) {
+            await sendExpoPushNotification(
+              previousUser.notificationToken,
+              'Teklifiniz geçildi!',
+              `${auction.title} mezatında teklifiniz geçildi. Yeni fiyat: ${updatedAuction.currentPrice}₺`,
+              { type: 'auction', auctionId: auctionId },
+              lastBid.user.toString()
+            );
+          }
+        }
+      } catch (pushErr) {
+        console.error('Outbid push bildirimi gönderilemedi:', pushErr);
+      }
+    })();
+
+    const nextMinIncrement = getMinIncrement(updatedAuction.currentPrice);
+    res.status(201).json({
+      message: 'Teklif başarıyla verildi',
+      bid: newBid,
+      minNextBid: updatedAuction.currentPrice + nextMinIncrement,
+    });
   } catch (err) {
     console.error('Teklif verme hatası:', err);
     res.status(500).json({ message: 'Sunucu hatası', error: err.message });
   }
 });
 
-// Teklif listesini getir (detay ekranı için)
+// Teklif listesini getir (detay ekranı için) - misafirler de görebilir
 router.get('/:auctionId', async (req, res) => {
   try {
     const { auctionId } = req.params;
@@ -64,9 +112,13 @@ router.get('/:auctionId', async (req, res) => {
 
 // Kullanıcının tüm tekliflerini, her mezat için sadece son teklifi getir
 // routes/bid.js
-router.get('/user/:userId', async (req, res) => {
+router.get('/user/:userId', requireAuth(), async (req, res) => {
   try {
     const userId = req.params.userId;
+
+    if (userId !== req.user.id) {
+      return res.status(403).json({ message: 'Yetersiz yetki' });
+    }
 
     // Kullanıcının verdiği tüm teklifleri, mezat ve user ile birlikte çek
     const userBids = await Bid.find({ user: userId })
