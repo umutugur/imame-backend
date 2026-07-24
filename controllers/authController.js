@@ -279,15 +279,16 @@ exports.forgotPassword = async (req, res) => {
         await user.save();
       }
 
-      try {
-        await sendMail({
-          to: user.email,
-          subject: 'İmame şifre sıfırlama kodu',
-          text: `Şifre sıfırlama kodunuz: ${code}\n\nBu kod 15 dakika süreyle geçerlidir. Bu isteği siz yapmadıysanız bu e-postayı yok sayabilirsiniz.`,
-        });
-      } catch (mailErr) {
+      // Maili BEKLEME: SMTP yavaş/erişilemez olsa bile yanıt anında dönsün,
+      // istemci butonu takılmasın. Enumerasyon zaten genel mesajla önlendiğinden
+      // yanıt mail sonucuna bağlı değil.
+      sendMail({
+        to: user.email,
+        subject: 'İmame şifre sıfırlama kodu',
+        text: `Şifre sıfırlama kodunuz: ${code}\n\nBu kod 15 dakika süreyle geçerlidir. Bu isteği siz yapmadıysanız bu e-postayı yok sayabilirsiniz.`,
+      }).catch((mailErr) => {
         console.error('❌ Şifre sıfırlama e-postası gönderilemedi:', mailErr.message);
-      }
+      });
     }
 
     return res.status(200).json({ message: GENERIC_FORGOT_MESSAGE });
