@@ -6,7 +6,11 @@
 // Email-client uyumu: tablo tabanlı, inline stil, web fontu YOK (Georgia), gradient YOK.
 // Logo koyu üstünde okunsun diye krem madalyon içinde; Cloudinary'de barındırılıyor.
 
-const LOGO_URL = 'https://res.cloudinary.com/dlazcw1gc/image/upload/w_420/imame-brand/logo.png';
+// Krem madalyon + altın çerçeve GÖRSELE gömülü (Cloudinary transform). Kritik:
+// karanlık mod istemcileri HTML/CSS arka planlarını koyulaştırır ama GÖRSEL
+// içeriğine dokunmaz — böylece logonun arkasındaki krem her yerde krem kalır.
+const LOGO_URL =
+  'https://res.cloudinary.com/dlazcw1gc/image/upload/e_trim/c_pad,w_440,h_248,b_rgb:fffdf7,r_28,bo_3px_solid_rgb:c9a24b/imame-brand/logo.png';
 
 const B = {
   page: '#160d07',       // sayfa zemini (en koyu)
@@ -45,12 +49,8 @@ function shell({ kicker, heading, bodyHtml }) {
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${B.goldLine};border-radius:12px;">
             <tr><td style="padding:36px 40px 8px 40px;text-align:center;">
 
-              <!-- Logo — krem madalyon içinde (koyu üstünde okunması için) -->
-              <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="background:${B.creamHi};border:2px solid ${B.gold};border-radius:20px;">
-                <tr><td style="padding:18px 26px;">
-                  <img src="${LOGO_URL}" width="188" alt="İmame" style="display:block;width:188px;max-width:52vw;height:auto;">
-                </td></tr>
-              </table>
+              <!-- Logo: krem madalyon + altın çerçeve görsele gömülü (dark-mode güvenli) -->
+              <img src="${LOGO_URL}" width="240" alt="İmame" style="display:block;margin:0 auto;width:240px;max-width:72%;height:auto;">
 
               <div style="margin:24px 0 4px;">${ornament()}</div>
 
