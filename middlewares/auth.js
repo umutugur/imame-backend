@@ -9,9 +9,14 @@ function requireAuth(roles = []) {
       if (!token) return res.status(401).json({ message: 'Unauthorized' });
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const u = await User.findById(decoded.id).select('role isBanned');
+      const u = await User.findById(decoded.id).select('role isBanned bannedUntil');
       if (!u) return res.status(401).json({ message: 'Invalid user' });
-      if (u.isBanned) return res.status(403).json({ message: 'Hesabınız banlı' });
+
+      const isCurrentlyBanned =
+        u.isBanned && (!u.bannedUntil || new Date(u.bannedUntil) > new Date());
+      if (isCurrentlyBanned) {
+        return res.status(403).json({ message: 'Hesabınız banlı' });
+      }
 
       if (roles.length && !roles.includes(u.role)) {
         return res.status(403).json({ message: 'Yetersiz yetki' });
@@ -25,4 +30,18 @@ function requireAuth(roles = []) {
   };
 }
 
-module.exports = { requireAuth };
+// Protects internal cron endpoints. Requires header `x-cron-key` to match
+// process.env.CRON_SECRET. Fails closed (503) if the secret isn't configured.
+function requireCronKey(req, res, next) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) {
+    return res.status(503).json({ message: 'Cron endpoint not configured' });
+  }
+  const provided = req.headers['x-cron-key'];
+  if (provided !== secret) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  next();
+}
+
+module.exports = { requireAuth, requireCronKey };
