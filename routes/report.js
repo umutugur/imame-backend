@@ -2,11 +2,14 @@
 const express = require('express');
 const router = express.Router();
 const Report = require('../models/Report');
+const { requireAuth } = require('../middlewares/auth');
 
 // Şikayet oluşturma (POST)
-router.post('/', async (req, res) => {
+router.post('/', requireAuth(), async (req, res) => {
   try {
-    const { reportedSeller, reporter, message } = req.body;
+    const { reportedSeller, message } = req.body;
+    // Şikayet eden kimliği her zaman istek sahibinden alınır, body'den güvenilmez.
+    const reporter = req.user.id;
     const report = new Report({ reportedSeller, reporter, message });
     await report.save();
     res.status(201).json({ message: 'Şikayet kaydedildi.' });
@@ -16,7 +19,7 @@ router.post('/', async (req, res) => {
 });
 
 // Tüm şikayetleri listele (GET)
-router.get('/', async (req, res) => {
+router.get('/', requireAuth(['admin']), async (req, res) => {
   try {
     const reports = await Report.find()
       .populate('reportedSeller', 'name email') // rapor edilen kullanıcının adı ve e-postası

@@ -2,11 +2,14 @@
 const express = require('express');
 const router = express.Router();
 const Rating = require('../models/Rating');
+const { requireAuth } = require('../middlewares/auth');
 
 // Satıcı puanla (her alışverişte bir kez)
-router.post('/', async (req, res) => {
+router.post('/', requireAuth(), async (req, res) => {
   try {
-    const { sellerId, buyerId, auctionId, score, comment } = req.body;
+    const { sellerId, auctionId, score, comment } = req.body;
+    // Puanlayan kullanıcı kimliği her zaman istek sahibinden alınır, body'den güvenilmez.
+    const buyerId = req.user.id;
     // Aynı alışveriş için tekrar puan vermesini engelle
     const alreadyRated = await Rating.findOne({ seller: sellerId, buyer: buyerId, auction: auctionId });
     if (alreadyRated) {
