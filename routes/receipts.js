@@ -7,11 +7,15 @@ const upload = multer({ storage });
 const Auction = require('../models/Auction');
 const User = require('../models/User');
 const { sendExpoPushNotification } = require('../utils/expoPush'); // FCM yerine Expo
+const { requireAuth } = require('../middlewares/auth');
 
 // 🔹 Satıcının kendi bitmiş mezatlarının dekontlarını listele
-router.get('/mine/:sellerId', async (req, res) => {
+router.get('/mine/:sellerId', requireAuth(['seller', 'admin']), async (req, res) => {
   try {
     const { sellerId } = req.params;
+    if (req.user.role !== 'admin' && req.user.id !== sellerId) {
+      return res.status(403).json({ message: 'Yetersiz yetki' });
+    }
 
     const auctions = await Auction.find({
       seller: sellerId,
@@ -35,13 +39,22 @@ router.get('/mine/:sellerId', async (req, res) => {
 });
 
 // 🔹 Dekont URL'sini yükle / kaydet + 🔔 Bildirim gönder
-router.put('/upload/:auctionId', async (req, res) => {
+router.put('/upload/:auctionId', requireAuth(), async (req, res) => {
   try {
     const { auctionId } = req.params;
     const { receiptUrl } = req.body;
 
     if (!receiptUrl) {
       return res.status(400).json({ message: 'Dekont URL gereklidir.' });
+    }
+
+    const existingAuction = await Auction.findById(auctionId);
+    if (!existingAuction) return res.status(404).json({ message: 'Mezat bulunamadı' });
+    if (
+      req.user.role !== 'admin' &&
+      (!existingAuction.winner || existingAuction.winner.toString() !== req.user.id)
+    ) {
+      return res.status(403).json({ message: 'Yetersiz yetki' });
     }
 
     const auction = await Auction.findByIdAndUpdate(
@@ -76,9 +89,18 @@ router.put('/upload/:auctionId', async (req, res) => {
 });
 
 // 🔹 Dekontu onayla + 🔔 Alıcıya bildirim gönder
-router.patch('/:auctionId/approve', async (req, res) => {
+router.patch('/:auctionId/approve', requireAuth(['seller', 'admin']), async (req, res) => {
   try {
     const { auctionId } = req.params;
+
+    const existingAuction = await Auction.findById(auctionId);
+    if (!existingAuction) return res.status(404).json({ message: 'Mezat bulunamadı' });
+    if (
+      req.user.role !== 'admin' &&
+      (!existingAuction.seller || existingAuction.seller.toString() !== req.user.id)
+    ) {
+      return res.status(403).json({ message: 'Yetersiz yetki' });
+    }
 
     const auction = await Auction.findByIdAndUpdate(
       auctionId,
@@ -107,9 +129,18 @@ router.patch('/:auctionId/approve', async (req, res) => {
 });
 
 // 🔹 Dekontu reddet + 🔔 Alıcıya bildirim gönder
-router.patch('/:auctionId/reject', async (req, res) => {
+router.patch('/:auctionId/reject', requireAuth(['seller', 'admin']), async (req, res) => {
   try {
     const { auctionId } = req.params;
+
+    const existingAuction = await Auction.findById(auctionId);
+    if (!existingAuction) return res.status(404).json({ message: 'Mezat bulunamadı' });
+    if (
+      req.user.role !== 'admin' &&
+      (!existingAuction.seller || existingAuction.seller.toString() !== req.user.id)
+    ) {
+      return res.status(403).json({ message: 'Yetersiz yetki' });
+    }
 
     const auction = await Auction.findByIdAndUpdate(
       auctionId,
