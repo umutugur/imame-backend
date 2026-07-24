@@ -9,7 +9,9 @@ const { sendExpoPushNotification } = require('../utils/expoPush');
  */
 exports.startChat = async (req, res) => {
   try {
-    const { auctionId, buyerId } = req.body;
+    const { auctionId } = req.body;
+    // Alıcı kimliği her zaman istek sahibinden alınır, body'den güvenilmez.
+    const buyerId = req.user.id;
 
     const auction = await Auction.findById(auctionId).populate('seller winner');
     if (!auction) {
@@ -48,6 +50,12 @@ exports.getChat = async (req, res) => {
       return res.status(404).json({ message: 'Sohbet bulunamadı.' });
     }
 
+    const isParticipant =
+      chat.buyer._id.toString() === req.user.id || chat.seller._id.toString() === req.user.id;
+    if (req.user.role !== 'admin' && !isParticipant) {
+      return res.status(403).json({ message: 'Bu sohbete erişiminiz yok.' });
+    }
+
     const messages = await Message.find({ chat: chatId }).sort({ createdAt: 1 });
 
     res.json({ success: true, chat, messages });
@@ -63,6 +71,9 @@ exports.getChat = async (req, res) => {
 exports.getUserChats = async (req, res) => {
   try {
     const { userId } = req.params;
+    if (req.user.role !== 'admin' && req.user.id !== userId) {
+      return res.status(403).json({ message: 'Yetersiz yetki' });
+    }
 
     // Sohbetleri al
     const chats = await Chat.find({
@@ -109,7 +120,9 @@ exports.getUserChats = async (req, res) => {
 exports.sendMessage = async (req, res) => {
   try {
     const { chatId } = req.params;
-    const { senderId, text } = req.body;
+    const { text } = req.body;
+    // Gönderen kimliği her zaman istek sahibinden alınır, body'den güvenilmez.
+    const senderId = req.user.id;
 
     const chat = await Chat.findById(chatId).populate('buyer seller auction');
     if (!chat) {
@@ -162,6 +175,16 @@ exports.sendMessage = async (req, res) => {
 exports.deleteChat = async (req, res) => {
   try {
     const { chatId } = req.params;
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({ message: 'Sohbet bulunamadı.' });
+    }
+    const isParticipant =
+      chat.buyer.toString() === req.user.id || chat.seller.toString() === req.user.id;
+    if (req.user.role !== 'admin' && !isParticipant) {
+      return res.status(403).json({ message: 'Bu sohbete erişiminiz yok.' });
+    }
 
     await Chat.findByIdAndDelete(chatId);
     await Message.deleteMany({ chat: chatId });
