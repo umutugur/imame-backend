@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { verifyAppleIdToken } = require('../helpers/verifyAppleIdToken');
 const { sendMail } = require('../utils/mailer');
+const { resetPasswordEmail } = require('../utils/emailTemplates');
 
 // Banı süresi dolmuşsa otomatik kaldırır. true dönerse kullanıcı hâlâ banlı demektir.
 async function isStillBanned(user) {
@@ -282,10 +283,12 @@ exports.forgotPassword = async (req, res) => {
       // Maili BEKLEME: SMTP yavaş/erişilemez olsa bile yanıt anında dönsün,
       // istemci butonu takılmasın. Enumerasyon zaten genel mesajla önlendiğinden
       // yanıt mail sonucuna bağlı değil.
+      const mail = resetPasswordEmail(code);
       sendMail({
         to: user.email,
-        subject: 'İmame şifre sıfırlama kodu',
-        text: `Şifre sıfırlama kodunuz: ${code}\n\nBu kod 15 dakika süreyle geçerlidir. Bu isteği siz yapmadıysanız bu e-postayı yok sayabilirsiniz.`,
+        subject: mail.subject,
+        text: mail.text,
+        html: mail.html,
       }).catch((mailErr) => {
         console.error('❌ Şifre sıfırlama e-postası gönderilemedi:', mailErr.message);
       });
