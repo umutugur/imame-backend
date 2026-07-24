@@ -2,7 +2,21 @@ const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { verifyAppleIdToken } = require('../helpers/verifyAppleIdToken');
+const { sendMail } = require('../utils/mailer');
+
+// Banı süresi dolmuşsa otomatik kaldırır. true dönerse kullanıcı hâlâ banlı demektir.
+async function isStillBanned(user) {
+  if (!user.isBanned) return false;
+  if (user.bannedUntil && user.bannedUntil <= new Date()) {
+    user.isBanned = false;
+    user.bannedUntil = null;
+    await user.save();
+    return false;
+  }
+  return true;
+}
 
 // Kullanıcı Kaydı
 exports.register = async (req, res) => {
@@ -35,11 +49,14 @@ exports.login = async (req, res) => {
     const { email, password } = req.body;
 
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: 'Geçersiz e-posta.' });
-    if (user.isBanned) return res.status(403).json({ message: 'Hesabınız banlanmıştır.' });
+    if (!user) return res.status(400).json({ message: 'E-posta veya şifre hatalı.' });
+
+    if (await isStillBanned(user)) {
+      return res.status(403).json({ message: 'Hesabınız banlanmıştır.' });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: 'Hatalı şifre.' });
+    if (!isMatch) return res.status(400).json({ message: 'E-posta veya şifre hatalı.' });
 
     // 🔑 JWT: sadece normal login’de
     const token = jwt.sign(
@@ -103,12 +120,19 @@ exports.socialLogin = async (req, res) => {
         await user.save();
       }
 
-      if (user.isBanned) {
+      if (await isStillBanned(user)) {
         return res.status(403).json({ message: 'Hesabınız banlı.' });
       }
 
+      const token = jwt.sign(
+        { id: user._id.toString(), role: user.role, email: user.email },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
       return res.status(200).json({
         message: 'Giriş başarılı.',
+        token,
         user: {
           _id: user._id,
           name: user.name,
@@ -162,12 +186,19 @@ exports.socialLogin = async (req, res) => {
         await user.save();
       }
 
-      if (user.isBanned) {
+      if (await isStillBanned(user)) {
         return res.status(403).json({ message: 'Hesabınız banlı.' });
       }
 
+      const token = jwt.sign(
+        { id: user._id.toString(), role: user.role, email: user.email },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
       return res.status(200).json({
         message: 'Giriş başarılı.',
+        token,
         user: {
           _id: user._id,
           name: user.name,
@@ -217,6 +248,92 @@ exports.updateProfile = async (req, res) => {
   } catch (error) {
     console.error('Profil güncelleme hatası:', error);
     res.status(500).json({ message: 'Sunucu hatası', error: error.message });
+  }
+};
+
+const RESET_CODE_TTL_MS = 15 * 60 * 1000; // 15 dakika
+const GENERIC_FORGOT_MESSAGE = 'Eğer bu e-posta kayıtlıysa bir kod gönderildi.';
+const GENERIC_RESET_ERROR = 'Kod geçersiz veya süresi dolmuş.';
+
+// Şifremi Unuttum — her zaman aynı genel mesajı döner (enumeration önleme)
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) {
+      return res.status(200).json({ message: GENERIC_FORGOT_MESSAGE });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const user = await User.findOne({ email: normalizedEmail });
+
+    // Sadece email/şifre ile giriş yapan (şifresi olan) kullanıcılar için kod üret
+    if (user && user.password) {
+      const now = new Date();
+      let code = user.resetCode;
+
+      // Süresi dolmamış bir kod varsa aynısını tekrar gönder (naif rate-limit)
+      if (!code || !user.resetCodeExpires || user.resetCodeExpires <= now) {
+        code = String(crypto.randomInt(100000, 1000000)).padStart(6, '0');
+        user.resetCode = code;
+        user.resetCodeExpires = new Date(now.getTime() + RESET_CODE_TTL_MS);
+        await user.save();
+      }
+
+      try {
+        await sendMail({
+          to: user.email,
+          subject: 'İmame şifre sıfırlama kodu',
+          text: `Şifre sıfırlama kodunuz: ${code}\n\nBu kod 15 dakika süreyle geçerlidir. Bu isteği siz yapmadıysanız bu e-postayı yok sayabilirsiniz.`,
+        });
+      } catch (mailErr) {
+        console.error('❌ Şifre sıfırlama e-postası gönderilemedi:', mailErr.message);
+      }
+    }
+
+    return res.status(200).json({ message: GENERIC_FORGOT_MESSAGE });
+  } catch (err) {
+    console.error('❌ forgotPassword hatası:', err.message);
+    // Enumeration'ı önlemek için hatada da aynı genel mesajı dön
+    return res.status(200).json({ message: GENERIC_FORGOT_MESSAGE });
+  }
+};
+
+// Şifre Sıfırlama — email + 6 haneli kod + yeni şifre
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body || {};
+
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ message: GENERIC_RESET_ERROR });
+    }
+
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({ message: 'Şifre en az 6 karakter olmalıdır.' });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const user = await User.findOne({ email: normalizedEmail });
+
+    const isValid =
+      user &&
+      user.resetCode &&
+      user.resetCodeExpires &&
+      user.resetCodeExpires > new Date() &&
+      String(user.resetCode) === String(code).trim();
+
+    if (!isValid) {
+      return res.status(400).json({ message: GENERIC_RESET_ERROR });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.resetCode = null;
+    user.resetCodeExpires = null;
+    await user.save();
+
+    return res.status(200).json({ message: 'Şifreniz başarıyla güncellendi.' });
+  } catch (err) {
+    console.error('❌ resetPassword hatası:', err.message);
+    return res.status(500).json({ message: 'Sunucu hatası.', error: err.message });
   }
 };
 

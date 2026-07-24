@@ -4,7 +4,9 @@ const {
   register,
   login,
   socialLogin,
-  updateProfile
+  updateProfile,
+  forgotPassword,
+  resetPassword
 } = require('../controllers/authController');
 
 //const authMiddleware = require('../middleware/authMiddleware');
@@ -12,6 +14,8 @@ const {
 router.post('/register', register);
 router.post('/login', login);
 router.post('/social-login', socialLogin);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 
 // 🔐 Profil güncelleme (sadece giriş yapmış kullanıcılar erişebilir)
 // Eğer istersen authMiddleware aktif edebilirsin:
