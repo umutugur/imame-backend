@@ -5,6 +5,9 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 dotenv.config();
 const path = require('path');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const { requireCronKey } = require('./middlewares/auth');
 
 // ✅ Routes
 const authRoutes = require('./routes/auth');
@@ -36,9 +39,19 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 // ───────────────────────────────────────────────────────────────
 app.set('trust proxy', 1);              // Render/Proxy arkasında IP vb. için
+app.use(helmet());
 app.use(cors());
 app.use(express.json({ limit: '2mb' })); // JSON body limiti
 app.use(express.urlencoded({ extended: true }));
+
+// Basit hız sınırlama — /api/ altındaki tüm rotalar için
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 dakika
+  limit: 300,               // IP başına istek limiti
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/', apiLimiter);
 
 
 // ───────────────────────────────────────────────────────────────
@@ -74,7 +87,7 @@ app.get('/', (_req, res) => {
 // ───────────────────────────────────────────────────────────────
 
 // 1️⃣ Mezataları bitirme (22:00 kuralıyla endsAt geçmiş olanlar)
-app.post('/cron/end-auctions', async (_req, res) => {
+app.post('/cron/end-auctions', requireCronKey, async (_req, res) => {
   try {
     const now = new Date();
     const expiredAuctions = await Auction.find({
@@ -118,7 +131,7 @@ app.post('/cron/end-auctions', async (_req, res) => {
 });
 
 // 2️⃣ Dekont kontrolü ve banlama
-app.post('/cron/check-receipts', async (_req, res) => {
+app.post('/cron/check-receipts', requireCronKey, async (_req, res) => {
   try {
     const now = new Date();
     const expiredAuctions = await Auction.find({
@@ -134,6 +147,7 @@ app.post('/cron/check-receipts', async (_req, res) => {
       if (!user) continue;
 
       user.isBanned = true;
+      user.bannedUntil = new Date(Date.now() + 7 * 24 * 3600 * 1000);
       await user.save();
 
       auction.isBannedProcessed = true;

@@ -37,6 +37,7 @@ async function runBanCheck() {
 
       // Kullanıcıyı banla
       user.isBanned = true;
+      user.bannedUntil = new Date(Date.now() + 7 * 24 * 3600 * 1000);
       await user.save();
 
       // Mezat üzerinde işaretle
