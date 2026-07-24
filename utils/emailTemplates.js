@@ -33,7 +33,7 @@ function resetPasswordEmail(code) {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#d8cdb8;padding:26px 0;">
     <tr><td align="center">
 
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">
         <tr><td style="font-size:0;line-height:0;">
           <img src="${IMG_TOP}" width="600" alt="İmame — Doğrulama Kodunuz" style="${imgStyle}">
         </td></tr>
