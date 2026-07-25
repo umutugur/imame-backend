@@ -106,6 +106,27 @@ router.get('/all', async (req, res) => {
   }
 });
 
+// Aday havuzu önbelleği — sıralama girdisi (id + iki sayaç) tüm kullanıcılar için
+// aynıdır ve yavaş değişir. Böylece her sayfa isteğinde tam tarama yapılmaz; 1000
+// mezat ölçeğinde sayfalama maliyeti sabit kalır. Kişiselleştirme etkilenmez:
+// kullanıcıya özel olan "görüldü" kümesi ayrı sorgulanır.
+// Bedeli: yeni eklenen mezat ve sayaç değişimleri en fazla 30 sn gecikmeyle yansır
+// (kova boyutu 10 olduğu için adaleti etkilemez).
+const CANDIDATE_TTL_MS = 30000;
+let candidateCache = { at: 0, data: null };
+
+async function getFeedCandidates() {
+  const now = Date.now();
+  if (candidateCache.data && now - candidateCache.at < CANDIDATE_TTL_MS) {
+    return candidateCache.data;
+  }
+  const data = await Auction.find({ isEnded: false })
+    .select('_id impressionCount bidCount')
+    .lean();
+  candidateCache = { at: now, data };
+  return data;
+}
+
 // ✅ Adil teşhirli feed — misafir + girişli (sayfalı)
 router.get('/feed', optionalAuth(), async (req, res) => {
   try {
@@ -114,10 +135,8 @@ router.get('/feed', optionalAuth(), async (req, res) => {
     const userId = req.user?.id || null;
     const seed = userId || String(req.query.seed || Math.random());
 
-    // 1) Aday havuzu — sıralama için sadece küçük alanlar
-    const candidates = await Auction.find({ isEnded: false })
-      .select('_id impressionCount bidCount')
-      .lean();
+    // 1) Aday havuzu — sıralama için sadece küçük alanlar (30 sn önbellekli)
+    const candidates = await getFeedCandidates();
 
     // 2) Kullanıcının bugün gördükleri
     let seenIds = new Set();
