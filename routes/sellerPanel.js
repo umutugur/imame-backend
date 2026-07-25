@@ -1,5 +1,6 @@
 // routes/sellerPanel.js
 const path = require('path');
+const mongoose = require('mongoose');
 const express = require('express');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
@@ -26,7 +27,7 @@ cloudinary.config({
 // Panel HTML
 // -----------------------------
 router.get('/seller', (_req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'seller', 'seller.html'));
+  res.sendFile(path.join(__dirname, '..', 'seller', 'index.html'));
 });
 
 // -----------------------------
@@ -119,6 +120,66 @@ router.get('/api/seller/auctions', requireAuth(['seller']), async (req, res) => 
   } catch (e) {
     console.error('List error:', e);
     res.status(500).json({ ok: false, message: 'Liste alınamadı' });
+  }
+});
+
+// -----------------------------
+// Mezat Düzenle — sahiplik + adalet kuralları
+// -----------------------------
+router.put('/api/seller/auctions/:id', requireAuth(['seller', 'admin']), upload.array('images', 5), async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ ok: false, message: 'Geçersiz mezat kimliği' });
+    }
+    const auction = await Auction.findById(req.params.id);
+    if (!auction) return res.status(404).json({ ok: false, message: 'Mezat bulunamadı' });
+
+    const isOwner = String(auction.seller) === req.user.id;
+    if (req.user.role !== 'admin' && !isOwner) {
+      return res.status(403).json({ ok: false, message: 'Bu mezat size ait değil' });
+    }
+    if (auction.isEnded) {
+      return res.status(403).json({ ok: false, message: 'Biten mezat düzenlenemez' });
+    }
+
+    const { title, description, isSigned, startingPrice } = req.body;
+    if (typeof title === 'string' && title.trim()) auction.title = title.trim();
+    if (typeof description === 'string') auction.description = description.trim();
+    if (isSigned !== undefined) auction.isSigned = isSigned === 'true' || isSigned === true;
+
+    // Fiyat yalnızca hiç teklif yokken değiştirilebilir (teklif verenlere karşı adil).
+    const hasBids = (auction.bidCount || 0) > 0;
+    if (!hasBids && startingPrice !== undefined && startingPrice !== '') {
+      const p = Number(startingPrice);
+      if (!Number.isFinite(p) || p < 0) {
+        return res.status(400).json({ ok: false, message: 'Başlangıç fiyatı geçersiz' });
+      }
+      auction.startingPrice = p;
+      auction.currentPrice = p; // teklif yokken ikisi eşittir
+    }
+
+    // Yeni görsel gönderildiyse dizi TÜMÜYLE değiştirilir; gönderilmediyse dokunulmaz.
+    // Yükleme biçimi POST /api/seller/auctions ile birebir aynı (klasör: imame/auctions).
+    if (req.files && req.files.length) {
+      auction.images = await Promise.all(
+        req.files.map(
+          (file) =>
+            new Promise((resolve, reject) => {
+              const stream = cloudinary.uploader.upload_stream(
+                { folder: 'imame/auctions' },
+                (err, result) => (err ? reject(err) : resolve(result.secure_url))
+              );
+              stream.end(file.buffer);
+            })
+        )
+      );
+    }
+
+    await auction.save();
+    res.json({ ok: true, item: auction.toObject() });
+  } catch (e) {
+    console.error('Mezat güncelleme hatası:', e);
+    res.status(500).json({ ok: false, message: 'Mezat güncellenemedi' });
   }
 });
 
