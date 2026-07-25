@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>İmame — Satıcı Paneli</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,900&family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/seller/styles.css">
+</head>
+<body>
+
+<!-- ═══════════ Giriş ═══════════ -->
+<div id="loginView" class="login-wrap">
+  <div class="login-card">
+    <h1 class="serif">İmame</h1>
+    <div class="sub">Satıcı Paneli</div>
+    <label for="loginEmail">E-posta</label>
+    <input id="loginEmail" type="email" placeholder="ornek@imame.com" autocomplete="username">
+    <label for="loginPassword">Şifre</label>
+    <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password">
+    <button class="btn btn-primary" id="loginBtn" style="width:100%;justify-content:center;margin-top:18px">Giriş Yap</button>
+    <div id="loginMsg" class="msg"></div>
+  </div>
+</div>
+
+<!-- ═══════════ Uygulama ═══════════ -->
+<div id="appView" class="shell hidden">
+  <aside class="sidebar">
+    <div class="brand serif">İMAME<small>SATICI PANELİ</small></div>
+    <nav class="nav" id="nav">
+      <a data-tab="overview" class="on">Genel Bakış</a>
+      <a data-tab="auctions">Mezatlarım</a>
+      <a data-tab="orders">Siparişler <span id="navPendingBadge" class="badge-red hidden">0</span></a>
+      <a data-tab="form">Mezat Ekle</a>
+    </nav>
+    <div class="sidebar-foot">
+      <div id="sellerName">—</div>
+      <button class="btn btn-ghost btn-sm" id="logoutBtn"
+              style="margin-top:8px;color:#b6a488;border-color:rgba(216,178,90,.3)">Çıkış</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <!-- Genel Bakış -->
+    <section id="tab-overview">
+      <h2 class="serif" style="margin-bottom:14px">Genel Bakış</h2>
+      <div class="kpis">
+        <div class="kpi"><div class="l">BUGÜN</div><div class="v" id="kpiToday">₺0</div><div class="d">onaylı satış</div></div>
+        <div class="kpi"><div class="l">BU HAFTA</div><div class="v" id="kpiWeek">₺0</div><div class="d">onaylı satış</div></div>
+        <div class="kpi"><div class="l">GEÇEN HAFTA</div><div class="v" id="kpiPrevWeek">₺0</div><div class="d">onaylı satış</div></div>
+        <div class="kpi gold"><div class="l">GÖRÜNTÜLENME</div><div class="v" id="kpiViews">0</div><div class="d">tüm mezatlar</div></div>
+        <div class="kpi"><div class="l">TEKLİF</div><div class="v" id="kpiBids">0</div><div class="d">toplam</div></div>
+        <div class="kpi"><div class="l">DÖNÜŞÜM</div><div class="v" id="kpiConversion">%0</div><div class="d">teklif / gösterim</div></div>
+      </div>
+    </section>
+
+    <!-- Mezatlarım -->
+    <section id="tab-auctions" class="hidden">
+      <div class="toolbar">
+        <h2 class="serif">Mezatlarım</h2>
+        <select id="auctionSort">
+          <option value="new">En yeni</option>
+          <option value="views">En çok görüntülenen</option>
+          <option value="bids">En çok teklif alan</option>
+          <option value="lowconv">Dönüşümü en düşük</option>
+        </select>
+      </div>
+      <table>
+        <thead><tr>
+          <th></th><th>MEZAT</th><th>FİYAT</th><th>GÖRÜNTÜLENME</th><th>TEKLİF</th><th>DÖNÜŞÜM</th><th></th>
+        </tr></thead>
+        <tbody id="auctionRows"></tbody>
+      </table>
+      <div id="auctionsMsg" class="msg"></div>
+    </section>
+
+    <!-- Siparişler -->
+    <section id="tab-orders" class="hidden">
+      <h2 class="serif" style="margin-bottom:12px">Siparişler</h2>
+      <table>
+        <thead><tr>
+          <th>MEZAT</th><th>KAZANAN</th><th>TUTAR</th><th>KALAN SÜRE</th><th>DEKONT</th><th></th>
+        </tr></thead>
+        <tbody id="orderRows"></tbody>
+      </table>
+      <div id="ordersMsg" class="msg"></div>
+    </section>
+
+    <!-- Ekle / Düzenle -->
+    <section id="tab-form" class="hidden">
+      <h2 class="serif" id="formTitle" style="margin-bottom:12px">Mezat Ekle</h2>
+      <div class="card" style="max-width:640px">
+        <label for="f-title">Başlık</label>
+        <input id="f-title" placeholder="Örn: 33 Hane Kehribar Tespih 10mm">
+
+        <label for="f-price">Başlangıç fiyatı (₺)</label>
+        <input id="f-price" type="number" min="0" step="1">
+        <div id="formPriceLock" class="lock-note hidden">Bu mezata teklif verildiği için fiyat değiştirilemez.</div>
+
+        <label for="f-signed">Usta imzalı</label>
+        <select id="f-signed">
+          <option value="false">Hayır</option>
+          <option value="true">Evet</option>
+        </select>
+
+        <label for="f-desc">Açıklama</label>
+        <textarea id="f-desc" placeholder="Malzeme, işçilik, ölçüler…"></textarea>
+
+        <label for="f-images">Görseller (en fazla 5)</label>
+        <input id="f-images" type="file" accept="image/*" multiple>
+        <div id="f-preview" class="preview"></div>
+
+        <div style="display:flex;gap:10px;margin-top:18px">
+          <button class="btn btn-primary" id="formSubmit">Kaydet</button>
+          <button class="btn btn-ghost hidden" id="formCancel">Vazgeç</button>
+        </div>
+        <div id="formMsg" class="msg"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Dekont görseli -->
+<div class="modal" id="imgModal">
+  <button class="modal-close" id="modalClose">×</button>
+  <img id="modalImg" alt="Dekont">
+</div>
+
+<script type="module" src="/seller/js/main.js"></script>
+</body>
+</html>
