@@ -6,7 +6,11 @@ const { storage } = require('../config/cloudinary');
 const upload = multer({ storage });
 const calculateEndsAt = require('../utils/calculateEndsAt'); // ✅ yeni eklendi
 const User = require('../models/User');
-const { requireAuth } = require('../middlewares/auth');
+const mongoose = require('mongoose');
+const AuctionSeen = require('../models/AuctionSeen');
+const auctionDayKey = require('../utils/auctionDayKey');
+const { rankAuctions } = require('../utils/feedRanking');
+const { requireAuth, optionalAuth } = require('../middlewares/auth');
 
 // ✅ Mezat ekleme (usta imzalı ve fotoğraflı)
 router.post('/', requireAuth(['seller', 'admin']), upload.array('images', 5), async (req, res) => {
@@ -102,6 +106,55 @@ router.get('/all', async (req, res) => {
   }
 });
 
+// ✅ Adil teşhirli feed — misafir + girişli (sayfalı)
+router.get('/feed', optionalAuth(), async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const userId = req.user?.id || null;
+    const seed = userId || String(req.query.seed || Math.random());
+
+    // 1) Aday havuzu — sıralama için sadece küçük alanlar
+    const candidates = await Auction.find({ isEnded: false })
+      .select('_id impressionCount bidCount')
+      .lean();
+
+    // 2) Kullanıcının bugün gördükleri
+    let seenIds = new Set();
+    if (userId) {
+      const doc = await AuctionSeen.findOne({ user: userId, day: auctionDayKey() })
+        .select('seen')
+        .lean();
+      if (doc && doc.seen) seenIds = new Set(doc.seen.map(String));
+    }
+
+    // 3) Faz seçimi: görülmemişler bitince ikinci tur
+    const unseen = candidates.filter((a) => !seenIds.has(String(a._id)));
+    const phase = unseen.length > 0 ? 'unseen' : 'seen';
+    const pool = phase === 'unseen' ? unseen : candidates;
+
+    // 4) Sırala ve dilimle (ikinci turda offset kullanılır)
+    const ranked = rankAuctions(pool, seed);
+    const start = phase === 'seen' ? offset : 0;
+    const ids = ranked.slice(start, start + limit).map((r) => r.id);
+
+    // 5) Tam dokümanları çek, sırayı koru
+    const docs = await Auction.find({ _id: { $in: ids } })
+      .populate('seller', 'companyName')
+      .lean();
+    const byId = new Map(docs.map((d) => [String(d._id), d]));
+    const items = ids.map((id) => byId.get(String(id))).filter(Boolean);
+
+    res.json({
+      items,
+      hasMore: phase === 'seen' ? start + limit < ranked.length : ranked.length > limit,
+      phase,
+    });
+  } catch (err) {
+    console.error('Feed listeleme hatası:', err);
+    res.status(500).json({ message: 'Sunucu hatası', error: err.message });
+  }
+});
 
 // ✅ Belirli mezat detaylarını getir
 router.get('/:id', async (req, res) => {
