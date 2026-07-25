@@ -1,0 +1,19 @@
+{
+  "_comment": "Yalnızca tespih içeren, görsel olarak doğrulanmış URL'ler. Kur'an/seccade/haç içeren görseller kabul edilmez. Her görsel bir contact sheet üzerinden Read aracıyla tek tek incelenmiştir.",
+  "images": [
+    "https://images.pexels.com/photos/8522564/pexels-photo-8522564.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "https://images.pexels.com/photos/7249287/pexels-photo-7249287.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "https://images.pexels.com/photos/8710827/pexels-photo-8710827.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "https://images.pexels.com/photos/15850554/pexels-photo-15850554.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "https://images.pexels.com/photos/31005905/pexels-photo-31005905.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "https://images.unsplash.com/photo-1548925081-d5087ef8f683?ixlib=rb-4.1.0&q=85&fm=jpg&crop=entropy&cs=srgb&w=800",
+    "https://images.pexels.com/photos/10429340/pexels-photo-10429340.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "https://images.pexels.com/photos/10596342/pexels-photo-10596342.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "https://images.pexels.com/photos/10738355/pexels-photo-10738355.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "https://images.pexels.com/photos/8860296/pexels-photo-8860296.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "https://images.pexels.com/photos/15924034/pexels-photo-15924034.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "https://images.pexels.com/photos/30161209/pexels-photo-30161209.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "https://images.pexels.com/photos/32614625/pexels-photo-32614625.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "https://images.pexels.com/photos/9977621/pexels-photo-9977621.jpeg?auto=compress&cs=tinysrgb&w=800"
+  ]
+}
