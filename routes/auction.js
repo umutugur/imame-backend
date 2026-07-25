@@ -156,6 +156,48 @@ router.get('/feed', optionalAuth(), async (req, res) => {
   }
 });
 
+// ✅ Görüntülenme bildirimi — istemci görünen kartları toplu gönderir
+router.post('/impressions', optionalAuth(), async (req, res) => {
+  try {
+    const raw = Array.isArray(req.body && req.body.auctionIds) ? req.body.auctionIds : [];
+    const ids = [...new Set(raw.map(String))]
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .slice(0, 50);
+    if (!ids.length) return res.json({ ok: true });
+
+    const userId = req.user?.id || null;
+
+    // Satıcının kendi mezatları SAYILMAZ (kendi ilanını yenileyerek şişirmesin)
+    let countable = ids;
+    if (userId) {
+      const owned = await Auction.find({ _id: { $in: ids }, seller: userId })
+        .select('_id')
+        .lean();
+      const ownedSet = new Set(owned.map((a) => String(a._id)));
+      countable = ids.filter((id) => !ownedSet.has(id));
+    }
+
+    if (countable.length) {
+      await Auction.updateMany({ _id: { $in: countable } }, { $inc: { impressionCount: 1 } });
+    }
+
+    // "Görüldü" kümesine TÜM gösterilenler yazılır (kendi mezatları dahil) —
+    // tekrar gösterilmesinler diye. Sadece SAYAÇ hariç tutulur.
+    if (userId) {
+      await AuctionSeen.updateOne(
+        { user: userId, day: auctionDayKey() },
+        { $addToSet: { seen: { $each: ids } }, $setOnInsert: { createdAt: new Date() } },
+        { upsert: true }
+      );
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Görüntülenme kaydı hatası:', err);
+    res.status(500).json({ message: 'Sunucu hatası' });
+  }
+});
+
 // ✅ Belirli mezat detaylarını getir
 router.get('/:id', async (req, res) => {
   try {
