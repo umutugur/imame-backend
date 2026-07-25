@@ -107,7 +107,11 @@ router.post('/api/seller/auctions', requireAuth(['seller']), upload.array('image
 router.get('/api/seller/auctions', requireAuth(['seller']), async (req, res) => {
   try {
     const items = await Auction.find({ seller: req.user.id })
-      .select('_id title currentPrice startingPrice endsAt images isSigned isEnded receiptStatus')
+      .select(
+        '_id title description currentPrice startingPrice endsAt images isSigned isEnded ' +
+        'receiptStatus receiptUrl paymentDeadline isBannedProcessed impressionCount bidCount winner'
+      )
+      .populate('winner', 'name email phone address')
       .sort({ createdAt: -1 })
       .lean();
 
