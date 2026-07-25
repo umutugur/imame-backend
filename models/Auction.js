@@ -23,6 +23,12 @@ const auctionSchema = new mongoose.Schema({
   //Dekont Görseli ve bilgisi
   receiptUrl: { type: String },
 receiptStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+
+  // Feed sıralaması için sayaçlar
+  impressionCount: { type: Number, default: 0 },
+  bidCount: { type: Number, default: 0 },
 });
+
+auctionSchema.index({ isEnded: 1, impressionCount: 1 });
 
 module.exports = mongoose.model('Auction', auctionSchema);
