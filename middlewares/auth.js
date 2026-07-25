@@ -44,4 +44,26 @@ function requireCronKey(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, requireCronKey };
+// Token varsa çözer ve req.user'ı doldurur; yoksa/geçersizse sessizce devam eder.
+// Misafir de erişebilen ama girişliye kişiselleşen uçlar için (feed, impressions).
+function optionalAuth() {
+  return async (req, res, next) => {
+    try {
+      const hdr = req.headers.authorization || '';
+      const token = hdr.startsWith('Bearer ') ? hdr.slice(7) : null;
+      if (!token) return next();
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const u = await User.findById(decoded.id).select('role isBanned bannedUntil');
+      const stillBanned = u && u.isBanned && (!u.bannedUntil || new Date(u.bannedUntil) > new Date());
+      if (u && !stillBanned) {
+        req.user = { id: decoded.id, role: u.role, email: decoded.email };
+      }
+      next();
+    } catch (e) {
+      next(); // geçersiz token misafir sayılır
+    }
+  };
+}
+
+module.exports = { requireAuth, requireCronKey, optionalAuth };
