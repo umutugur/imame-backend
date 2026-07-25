@@ -47,7 +47,7 @@ router.post('/', requireAuth(), async (req, res) => {
     // Atomic update: Sadece currentPrice daha küçükse güncelle ve yeni currentPrice'ı al
     const updatedAuction = await Auction.findOneAndUpdate(
       { _id: auctionId, currentPrice: { $lt: amount } },
-      { currentPrice: amount },
+      { $set: { currentPrice: amount }, $inc: { bidCount: 1 } },
       { new: true }
     );
 
