@@ -78,7 +78,16 @@
 
     <!-- Siparişler -->
     <section id="tab-orders" class="hidden">
-      <h2 class="serif" style="margin-bottom:12px">Siparişler</h2>
+      <div class="toolbar">
+        <h2 class="serif">Siparişler</h2>
+        <select id="orderFilter">
+          <option value="all">Tümü</option>
+          <option value="pending">Onay bekleyen dekontlar</option>
+          <option value="hasReceipt">Dekontu olanlar</option>
+          <option value="waiting">Alıcı bekleniyor</option>
+          <option value="expired">Süresi dolanlar</option>
+        </select>
+      </div>
       <table>
         <thead><tr>
           <th>MEZAT</th><th>KAZANAN</th><th>TUTAR</th><th>KALAN SÜRE</th><th>DEKONT</th><th></th>
