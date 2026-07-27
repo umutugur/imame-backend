@@ -49,6 +49,7 @@ const userSchema = new mongoose.Schema(
     // kullanıcı durumu
     isBanned: { type: Boolean, default: false },
     bannedUntil: { type: Date, default: null },
+    banReason: { type: String, default: null },
 
     // şifre sıfırlama (6 haneli kod)
     resetCode: { type: String, default: null },
