@@ -252,4 +252,109 @@ router.get('/api/admin/logs', requireAuth(['admin']), async (req, res) => {
   }
 });
 
+const BULK_MAX = 100;
+
+// Ortak: geçerli, tekil, azami BULK_MAX kimlik listesi
+function normalizeIds(raw) {
+  return [...new Set((Array.isArray(raw) ? raw : []).map(String))]
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .slice(0, BULK_MAX);
+}
+
+// ── Toplu ban ──
+// Güvenlik: isteği yapanın kendisi ve DİĞER ADMİNLER listeden çıkarılır; aksi halde
+// tek çağrıyla tüm yönetici kadrosu kilitlenebilirdi. Tek tek ban için /api/users/ban/:id.
+router.patch('/api/admin/users/bulk-ban', requireAuth(['admin']), async (req, res) => {
+  try {
+    const ids = normalizeIds(req.body && req.body.userIds);
+    if (!ids.length) return res.status(400).json({ ok: false, message: 'Kullanıcı seçilmedi' });
+
+    const { durationDays, reason } = req.body || {};
+    const skipped = [];
+    const targets = [];
+
+    const users = await User.find({ _id: { $in: ids } }).select('_id role').lean();
+    const found = new Set(users.map((u) => String(u._id)));
+    ids.forEach((id) => { if (!found.has(id)) skipped.push({ id, reason: 'Kullanıcı bulunamadı' }); });
+
+    for (const u of users) {
+      const id = String(u._id);
+      if (id === req.user.id) { skipped.push({ id, reason: 'Kendi hesabınız' }); continue; }
+      if (u.role === 'admin') { skipped.push({ id, reason: 'Yönetici hesabı' }); continue; }
+      targets.push(id);
+    }
+
+    if (targets.length) {
+      const days = Number(durationDays);
+      const bannedUntil = Number.isFinite(days) && days > 0
+        ? new Date(Date.now() + days * 24 * 3600 * 1000)
+        : null;
+      await User.updateMany(
+        { _id: { $in: targets } },
+        { $set: { isBanned: true, bannedUntil, banReason: reason || null } }
+      );
+      targets.forEach((id) =>
+        logAdminAction(req, {
+          action: 'bulk_ban', targetType: 'user', targetId: id,
+          meta: { durationDays: days || null, reason: reason || null },
+        })
+      );
+    }
+
+    res.json({ ok: true, affected: targets.length, skipped });
+  } catch (e) {
+    console.error('Toplu ban hatası:', e);
+    res.status(500).json({ ok: false, message: 'Toplu ban başarısız' });
+  }
+});
+
+// ── Toplu ban kaldırma ──
+router.patch('/api/admin/users/bulk-unban', requireAuth(['admin']), async (req, res) => {
+  try {
+    const ids = normalizeIds(req.body && req.body.userIds);
+    if (!ids.length) return res.status(400).json({ ok: false, message: 'Kullanıcı seçilmedi' });
+
+    await User.updateMany(
+      { _id: { $in: ids } },
+      { $set: { isBanned: false, bannedUntil: null, banReason: null } }
+    );
+    ids.forEach((id) =>
+      logAdminAction(req, { action: 'bulk_unban', targetType: 'user', targetId: id })
+    );
+
+    res.json({ ok: true, affected: ids.length, skipped: [] });
+  } catch (e) {
+    console.error('Toplu ban kaldırma hatası:', e);
+    res.status(500).json({ ok: false, message: 'İşlem başarısız' });
+  }
+});
+
+// ── Toplu mezat silme ──
+router.post('/api/admin/auctions/bulk-delete', requireAuth(['admin']), async (req, res) => {
+  try {
+    const ids = normalizeIds(req.body && req.body.auctionIds);
+    const reason = (req.body && req.body.reason) || '';
+    if (!ids.length) return res.status(400).json({ ok: false, message: 'Mezat seçilmedi' });
+    if (!reason.trim()) return res.status(400).json({ ok: false, message: 'Silme sebebi zorunlu' });
+
+    const found = await Auction.find({ _id: { $in: ids } }).select('_id').lean();
+    const foundIds = found.map((a) => String(a._id));
+    const skipped = ids.filter((id) => !foundIds.includes(id)).map((id) => ({ id, reason: 'Bulunamadı' }));
+
+    if (foundIds.length) {
+      await Auction.deleteMany({ _id: { $in: foundIds } });
+      foundIds.forEach((id) =>
+        logAdminAction(req, {
+          action: 'bulk_auction_delete', targetType: 'auction', targetId: id, meta: { reason },
+        })
+      );
+    }
+
+    res.json({ ok: true, affected: foundIds.length, skipped });
+  } catch (e) {
+    console.error('Toplu mezat silme hatası:', e);
+    res.status(500).json({ ok: false, message: 'Toplu silme başarısız' });
+  }
+});
+
 module.exports = router;
