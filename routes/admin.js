@@ -182,4 +182,74 @@ router.get('/api/admin/sellers', requireAuth(['admin']), async (req, res) => {
   }
 });
 
+// ── Kullanıcı detayı: ban kararı için bağlam ──
+router.get('/api/admin/users/:id', requireAuth(['admin']), async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ ok: false, message: 'Geçersiz kullanıcı kimliği' });
+    }
+    const user = await User.findById(req.params.id)
+      .select('-password -resetCode -resetCodeExpires')
+      .lean();
+    if (!user) return res.status(404).json({ ok: false, message: 'Kullanıcı bulunamadı' });
+
+    const now = new Date();
+    const [bids, wonAuctions, receiptsUploaded, receiptsApproved, unpaidWins, recentWins] =
+      await Promise.all([
+        Bid.countDocuments({ user: user._id }),
+        Auction.countDocuments({ winner: user._id }),
+        Auction.countDocuments({ winner: user._id, receiptUrl: { $nin: [null, ''] } }),
+        Auction.countDocuments({ winner: user._id, receiptStatus: 'approved' }),
+        Auction.countDocuments({
+          winner: user._id,
+          $or: [{ receiptUrl: null }, { receiptUrl: '' }, { receiptUrl: { $exists: false } }],
+          paymentDeadline: { $lt: now },
+        }),
+        Auction.find({ winner: user._id })
+          .select('title currentPrice endsAt receiptStatus receiptUrl')
+          .sort({ endsAt: -1 })
+          .limit(10)
+          .lean(),
+      ]);
+
+    res.json({
+      ok: true,
+      user,
+      stats: { bids, wonAuctions, receiptsUploaded, receiptsApproved, unpaidWins },
+      recentWins,
+    });
+  } catch (e) {
+    console.error('Admin kullanıcı detayı hatası:', e);
+    res.status(500).json({ ok: false, message: 'Kullanıcı alınamadı' });
+  }
+});
+
+// ── Denetim günlüğü ──
+router.get('/api/admin/logs', requireAuth(['admin']), async (req, res) => {
+  try {
+    const limit = clampLimit(req.query.limit);
+    const page = pageOf(req.query.page);
+    const filter = {};
+    if (req.query.action) filter.action = req.query.action;
+    if (req.query.actor && mongoose.Types.ObjectId.isValid(req.query.actor)) {
+      filter.actor = req.query.actor;
+    }
+
+    const [items, total] = await Promise.all([
+      AdminLog.find(filter)
+        .populate('actor', 'name email')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      AdminLog.countDocuments(filter),
+    ]);
+
+    res.json({ ok: true, items, total, page, limit });
+  } catch (e) {
+    console.error('Denetim günlüğü hatası:', e);
+    res.status(500).json({ ok: false, message: 'Kayıtlar alınamadı' });
+  }
+});
+
 module.exports = router;
