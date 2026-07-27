@@ -5,13 +5,34 @@ const Bid = require('../models/Bid');
 const { logAdminAction } = require('../utils/adminLog');
 const { sendExpoPushNotification } = require('../utils/expoPush');
 
-// 🔹 Tüm kullanıcıları getir
-exports.getAllUsers = async (_req, res) => {
+// 🔹 Tüm kullanıcıları getir (arama + rol filtresi + sayfalama)
+exports.getAllUsers = async (req, res) => {
   try {
-    const users = await User.find().sort({ createdAt: -1 });
-    res.status(200).json(users);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+
+    const filter = {};
+    if (req.query.role && ['buyer', 'seller', 'admin'].includes(req.query.role)) {
+      filter.role = req.query.role;
+    }
+    if (req.query.q) {
+      const rx = { $regex: String(req.query.q).trim(), $options: 'i' };
+      filter.$or = [{ name: rx }, { email: rx }, { companyName: rx }];
+    }
+
+    const [items, total] = await Promise.all([
+      User.find(filter)
+        .select('-password -resetCode -resetCodeExpires')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      User.countDocuments(filter),
+    ]);
+
+    res.json({ ok: true, items, total, page, limit });
   } catch (err) {
-    res.status(500).json({ message: 'Kullanıcılar alınamadı', error: err.message });
+    res.status(500).json({ ok: false, message: 'Kullanıcılar alınamadı', error: err.message });
   }
 };
 
