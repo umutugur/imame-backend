@@ -1,6 +1,6 @@
 // main.js — önyükleme, sekme yönlendirme, tek veri akışı, KPI hesabı.
-import { apiJson, getToken, getUser } from './api.js';
-import { initAuth, showApp, showLogin } from './auth.js';
+import { apiJson, getToken, getUser } from '/panel-shared/api.js';
+import { initAuth, showApp, showLogin } from '/panel-shared/auth.js';
 import { renderAuctions, initAuctionForm, openCreateForm } from './auctions.js';
 import { renderOrders } from './orders.js';
 
@@ -97,7 +97,7 @@ function startApp(user) {
 }
 
 initTabs();
-initAuth({ onLogin: startApp });
+initAuth({ onLogin: startApp, allowedRoles: ['seller', 'admin'] });
 initAuctionForm({ onSaved: async () => { await refresh(); showTab('auctions'); } });
 $('modalClose').addEventListener('click', () => $('imgModal').classList.remove('open'));
 $('imgModal').addEventListener('click', (e) => {

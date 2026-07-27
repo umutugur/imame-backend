@@ -1,5 +1,5 @@
 // auctions.js — mezat listesi (analitik rozetleriyle), form (ekle/düzenle), silme.
-import { apiJson } from './api.js';
+import { apiJson } from '/panel-shared/api.js';
 
 const $ = (id) => document.getElementById(id);
 const fmtTL = (n) => '₺' + Number(n || 0).toLocaleString('tr-TR');

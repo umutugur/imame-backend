@@ -89,6 +89,8 @@ app.use('/api/ratings', ratingRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/seller', express.static(path.join(__dirname, 'seller')));
+app.use('/panel-shared', express.static(path.join(__dirname, 'panel-shared')));
+app.use('/admin', express.static(path.join(__dirname, 'admin')));
 app.use('/api/devices', devicesRoutes);
 
 // ✅ Satıcı Paneli (WEB) – HTML sayfası + seller API endpoints

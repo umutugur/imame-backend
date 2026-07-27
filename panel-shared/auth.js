@@ -24,7 +24,7 @@ export function logout(reason) {
   }
 }
 
-export function initAuth({ onLogin }) {
+export function initAuth({ onLogin, allowedRoles = ['seller', 'admin'] }) {
   onUnauthorized((reason) => logout(reason));
   $('logoutBtn').addEventListener('click', () => logout(''));
 
@@ -44,8 +44,12 @@ export function initAuth({ onLogin }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Giriş başarısız');
       if (!data.token) throw new Error('Sunucu oturum anahtarı döndürmedi');
-      if (data.user?.role !== 'seller' && data.user?.role !== 'admin') {
-        throw new Error('Bu panel satıcı hesapları içindir.');
+      if (!allowedRoles.includes(data.user?.role)) {
+        throw new Error(
+          allowedRoles.includes('seller')
+            ? 'Bu panel satıcı hesapları içindir.'
+            : 'Bu panel yönetici hesapları içindir.'
+        );
       }
 
       setSession({ token: data.token, user: data.user });
