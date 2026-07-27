@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>İmame — Yönetici Paneli</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,900&family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/panel-shared/styles.css">
+</head>
+<body>
+
+<!-- ═══════════ Giriş ═══════════ -->
+<div id="loginView" class="login-wrap">
+  <div class="login-card">
+    <h1 class="serif">İmame</h1>
+    <div class="sub">Yönetici Paneli</div>
+    <label for="loginEmail">E-posta</label>
+    <input id="loginEmail" type="email" placeholder="ornek@imame.com" autocomplete="username">
+    <label for="loginPassword">Şifre</label>
+    <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password">
+    <button class="btn btn-primary" id="loginBtn" style="width:100%;justify-content:center;margin-top:18px">Giriş Yap</button>
+    <div id="loginMsg" class="msg"></div>
+  </div>
+</div>
+
+<!-- ═══════════ Uygulama ═══════════ -->
+<div id="appView" class="shell hidden">
+  <aside class="sidebar">
+    <div class="brand serif">İMAME<small>YÖNETİCİ PANELİ</small></div>
+    <nav class="nav" id="nav">
+      <a data-tab="overview" class="on">Genel Bakış</a>
+      <a data-tab="users">Kullanıcılar</a>
+      <a data-tab="sellers">Satıcılar</a>
+      <a data-tab="auctions">Mezatlar</a>
+      <a data-tab="receipts">Dekontlar</a>
+      <a data-tab="reports">Şikayetler <span id="navReportBadge" class="badge-red hidden">0</span></a>
+      <a data-tab="notify">Bildirimler</a>
+      <a data-tab="logs">Kayıtlar</a>
+    </nav>
+    <div class="sidebar-foot">
+      <div id="adminName">—</div>
+      <button class="btn btn-ghost btn-sm" id="logoutBtn"
+              style="margin-top:8px;color:#b6a488;border-color:rgba(216,178,90,.3)">Çıkış</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <!-- Genel Bakış -->
+    <section id="tab-overview">
+      <h2 class="serif" style="margin-bottom:14px">Genel Bakış</h2>
+      <div class="kpis">
+        <div class="kpi"><div class="l">MEZATLAR</div><div class="v" id="ovAuctions">—</div></div>
+        <div class="kpi gold"><div class="l">CİRO</div><div class="v" id="ovRevenue">—</div></div>
+        <div class="kpi"><div class="l">KULLANICILAR</div><div class="v" id="ovUsers">—</div></div>
+        <div class="kpi"><div class="l">ETKİLEŞİM</div><div class="v" id="ovExposure">—</div></div>
+        <div class="kpi"><div class="l">DÖNÜŞÜM</div><div class="v" id="ovConversion">—</div></div>
+        <div class="kpi"><div class="l">ÖDENMEMİŞ</div><div class="v" id="ovUnpaid">—</div></div>
+      </div>
+    </section>
+
+    <!-- Kullanıcılar -->
+    <section id="tab-users" class="hidden">
+      <div class="toolbar">
+        <h2 class="serif">Kullanıcılar</h2>
+        <div style="display:flex;gap:8px">
+          <input id="userSearch" placeholder="Ad, e-posta veya firma ara…" style="width:220px">
+          <select id="userRole">
+            <option value="">Tüm roller</option>
+            <option value="buyer">Alıcı</option>
+            <option value="seller">Satıcı</option>
+            <option value="admin">Yönetici</option>
+          </select>
+        </div>
+      </div>
+      <div id="userBulkBar" class="toolbar hidden" style="background:#fbf5e7;border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px">
+        <div class="sub"><span id="userBulkCount">0</span> kullanıcı seçili</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-danger btn-sm" id="userBulkBanBtn">Toplu banla</button>
+          <button class="btn btn-ghost btn-sm" id="userBulkUnbanBtn">Toplu ban kaldır</button>
+        </div>
+      </div>
+      <table>
+        <thead><tr>
+          <th><input type="checkbox" id="userSelectAll"></th><th>KULLANICI</th><th>E-POSTA</th>
+          <th>ROL</th><th>KAYIT</th><th>BAN DURUMU</th><th></th>
+        </tr></thead>
+        <tbody id="userRows"></tbody>
+      </table>
+      <div id="usersMsg" class="msg"></div>
+    </section>
+
+    <!-- Satıcılar -->
+    <section id="tab-sellers" class="hidden">
+      <div class="toolbar"><h2 class="serif">Satıcılar</h2></div>
+      <table>
+        <thead><tr>
+          <th>FİRMA</th><th>E-POSTA</th><th>MEZAT</th><th>AKTİF</th><th>CİRO</th>
+          <th>GÖSTERİM / TEKLİF</th><th>DÖNÜŞÜM</th>
+        </tr></thead>
+        <tbody id="sellerRows"></tbody>
+      </table>
+      <div id="sellersMsg" class="msg"></div>
+
+      <div class="card" style="max-width:520px;margin-top:22px">
+        <h3 class="serif" style="margin-bottom:12px">Yeni Satıcı Ekle</h3>
+        <label for="newSellerName">Ad Soyad</label>
+        <input id="newSellerName" placeholder="Yetkili adı">
+        <label for="newSellerCompany">Firma adı</label>
+        <input id="newSellerCompany" placeholder="Örn: Anadolu Tespih">
+        <label for="newSellerEmail">E-posta</label>
+        <input id="newSellerEmail" type="email" placeholder="ornek@firma.com">
+        <label for="newSellerPass">Şifre</label>
+        <input id="newSellerPass" type="password" placeholder="••••••••">
+        <button class="btn btn-primary" id="newSellerBtn" style="margin-top:14px">Satıcı Ekle</button>
+        <div id="newSellerMsg" class="msg"></div>
+      </div>
+    </section>
+
+    <!-- Mezatlar -->
+    <section id="tab-auctions" class="hidden">
+      <div class="toolbar">
+        <h2 class="serif">Mezatlar</h2>
+        <div style="display:flex;gap:8px">
+          <select id="aucStatus">
+            <option value="">Tüm durumlar</option>
+            <option value="active">Aktif</option>
+            <option value="ended">Sona ermiş</option>
+          </select>
+          <select id="aucSeller"><option value="">Tüm satıcılar</option></select>
+          <input id="aucSearch" placeholder="Başlıkta ara…" style="width:180px">
+        </div>
+      </div>
+      <div id="aucBulkBar" class="toolbar hidden" style="background:#fbf5e7;border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px">
+        <div class="sub"><span id="aucBulkCount">0</span> mezat seçili</div>
+        <button class="btn btn-danger btn-sm" id="aucBulkDeleteBtn">Toplu sil</button>
+      </div>
+      <table>
+        <thead><tr>
+          <th><input type="checkbox" id="aucSelectAll"></th><th></th><th>MEZAT</th><th>SATICI</th>
+          <th>FİYAT</th><th>GÖSTERİM</th><th>TEKLİF</th><th>DÖNÜŞÜM</th><th>DURUM</th><th></th>
+        </tr></thead>
+        <tbody id="aucRows"></tbody>
+      </table>
+      <div id="aucMsg" class="msg"></div>
+    </section>
+
+    <!-- Dekontlar -->
+    <section id="tab-receipts" class="hidden">
+      <div class="toolbar">
+        <h2 class="serif">Dekontlar</h2>
+        <select id="recFilter">
+          <option value="all">Tümü</option>
+          <option value="pending">Onay bekleyen</option>
+          <option value="hasReceipt">Dekontu olanlar</option>
+          <option value="expired">Süresi dolanlar</option>
+        </select>
+      </div>
+      <table>
+        <thead><tr>
+          <th>MEZAT</th><th>SATICI</th><th>KAZANAN</th><th>TUTAR</th>
+          <th>KALAN SÜRE</th><th>DEKONT</th><th></th>
+        </tr></thead>
+        <tbody id="recRows"></tbody>
+      </table>
+      <div id="recMsg" class="msg"></div>
+    </section>
+
+    <!-- Şikayetler -->
+    <section id="tab-reports" class="hidden">
+      <h2 class="serif" style="margin-bottom:14px">Şikayetler</h2>
+      <table>
+        <thead><tr>
+          <th>ŞİKAYET EDEN</th><th>ŞİKAYET EDİLEN</th><th>TARİH</th><th>MESAJ</th><th></th>
+        </tr></thead>
+        <tbody id="reportRows"></tbody>
+      </table>
+      <div id="reportsMsg" class="msg"></div>
+    </section>
+
+    <!-- Bildirimler -->
+    <section id="tab-notify" class="hidden">
+      <h2 class="serif" style="margin-bottom:14px">Bildirim Gönder</h2>
+      <div class="card" style="max-width:560px">
+        <label for="notifyTitle">Başlık</label>
+        <input id="notifyTitle" placeholder="Örn: Yeni özellik duyurusu">
+        <label for="notifyBody">Mesaj</label>
+        <textarea id="notifyBody" placeholder="Bildirim içeriği…"></textarea>
+        <button class="btn btn-primary" id="notifyBtn" style="margin-top:14px">Tüm kullanıcılara gönder</button>
+        <div id="notifyMsg" class="msg"></div>
+      </div>
+    </section>
+
+    <!-- Kayıtlar -->
+    <section id="tab-logs" class="hidden">
+      <div class="toolbar">
+        <h2 class="serif">Kayıtlar</h2>
+        <select id="logAction">
+          <option value="">Tüm eylemler</option>
+          <option value="ban">Ban</option>
+          <option value="unban">Ban kaldırma</option>
+          <option value="role_change">Rol değişimi</option>
+          <option value="auction_delete">Mezat silme</option>
+          <option value="receipt_approve">Dekont onayı</option>
+          <option value="receipt_reject">Dekont reddi</option>
+          <option value="notification_send">Bildirim gönderimi</option>
+          <option value="bulk_ban">Toplu ban</option>
+          <option value="bulk_unban">Toplu ban kaldırma</option>
+          <option value="bulk_auction_delete">Toplu mezat silme</option>
+        </select>
+      </div>
+      <table>
+        <thead><tr>
+          <th>TARİH</th><th>AKTÖR</th><th>EYLEM</th><th>HEDEF</th><th>DETAY</th>
+        </tr></thead>
+        <tbody id="logRows"></tbody>
+      </table>
+      <div id="logsMsg" class="msg"></div>
+    </section>
+  </main>
+</div>
+
+<!-- Görsel büyütme (dekont) -->
+<div class="modal" id="imgModal">
+  <button class="modal-close" id="modalClose">×</button>
+  <img id="modalImg" alt="Dekont">
+</div>
+
+<!-- Ban modalı -->
+<div class="modal" id="banModal">
+  <div class="card" style="max-width:420px;width:100%">
+    <h3 class="serif" style="margin-bottom:4px">Kullanıcıyı banla</h3>
+    <div class="sub" id="banUserName" style="margin-bottom:12px"></div>
+    <label for="banDuration">Süre</label>
+    <select id="banDuration">
+      <option value="">Süresiz</option>
+      <option value="7">7 gün</option>
+      <option value="30">30 gün</option>
+    </select>
+    <label for="banReason">Sebep</label>
+    <input id="banReason" placeholder="Örn: tekrarlayan ödeme kaçağı">
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn btn-danger" id="banConfirm">Banla</button>
+      <button class="btn btn-ghost" id="banCancel">Vazgeç</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/admin/js/main.js"></script>
+</body>
+</html>
