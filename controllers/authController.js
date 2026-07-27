@@ -19,10 +19,33 @@ async function isStillBanned(user) {
   return true;
 }
 
-// Kullanıcı Kaydı
+// Adres alt nesnesini de beyaz listeden geçirir; ham gövdeyi asla iç içe yaymayız.
+function pickAddress(a) {
+  if (!a || typeof a !== 'object') return undefined;
+  return {
+    ilId: a.ilId,
+    ilceId: a.ilceId,
+    mahalleId: a.mahalleId,
+    sokak: a.sokak,
+    apartmanNo: a.apartmanNo,
+    daireNo: a.daireNo,
+  };
+}
+
+// Kullanıcı Kaydı (herkese açık — yalnızca alıcı hesabı üretir).
+//
+// GÜVENLİK: Burası eskiden gövdeyi `...otherInfo` ile olduğu gibi User'a yayıyordu.
+// Bu, tokensiz bir isteğin `{"role":"admin"}` göndererek kendine yönetici hesabı
+// açmasına izin veriyordu. Artık yalnızca aşağıdaki alanlar okunuyor ve rol
+// sunucuda sabitleniyor. Satıcı/yönetici hesabı yalnızca POST /api/admin/sellers
+// üzerinden, yönetici oturumuyla açılır.
 exports.register = async (req, res) => {
   try {
-    const { name, email, password, role, ...otherInfo } = req.body;
+    const { name, email, password, phone, address } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ message: 'E-posta ve şifre zorunludur.' });
+    }
 
     const existing = await User.findOne({ email });
     if (existing) return res.status(400).json({ message: 'Bu e-posta zaten kayıtlı.' });
@@ -33,8 +56,9 @@ exports.register = async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      role,
-      ...otherInfo,
+      phone,
+      address: pickAddress(address),
+      role: 'buyer', // gövdeden gelen rol yok sayılır
     });
 
     await newUser.save();
@@ -43,6 +67,8 @@ exports.register = async (req, res) => {
     res.status(500).json({ message: 'Sunucu hatası.', error: err.message });
   }
 };
+
+exports._pickAddress = pickAddress;
 
 // Normal Giriş (👉 satıcı paneli için JWT burada üretiliyor)
 exports.login = async (req, res) => {

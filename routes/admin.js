@@ -1,7 +1,9 @@
 // routes/admin.js — yönetici uçları. Hepsi requireAuth(['admin']) ile korunur.
 const express = require('express');
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 const { requireAuth } = require('../middlewares/auth');
+const { _pickAddress: pickAddress } = require('../controllers/authController');
 const { logAdminAction } = require('../utils/adminLog');
 const Auction = require('../models/Auction');
 const User = require('../models/User');
@@ -189,6 +191,56 @@ router.get('/api/admin/sellers', requireAuth(['admin']), async (req, res) => {
   } catch (e) {
     console.error('Admin satıcı listesi hatası:', e);
     res.status(500).json({ ok: false, message: 'Satıcılar alınamadı' });
+  }
+});
+
+// ── Satıcı hesabı oluştur ──
+// Bu uç, satıcı yaratmayı herkese açık /api/auth/register'dan devralır. Orası
+// artık rolü zorla 'buyer' yapıyor; ayrıcalıklı hesap yalnızca burada, yönetici
+// oturumuyla ve denetim günlüğüne yazılarak açılabiliyor.
+// Alan kümesi mobildeki "Yeni Satıcı Ekle" ekranıyla birebir aynı tutulur.
+router.post('/api/admin/sellers', requireAuth(['admin']), async (req, res) => {
+  try {
+    const {
+      companyName, name, email, password, phone,
+      iban, ibanName, bankName, address,
+    } = req.body || {};
+
+    const eposta = String(email || '').trim().toLowerCase();
+    if (!companyName || !eposta || !password) {
+      return res.status(400).json({ ok: false, message: 'Firma adı, e-posta ve şifre zorunludur' });
+    }
+    if (String(password).length < 6) {
+      return res.status(400).json({ ok: false, message: 'Şifre en az 6 karakter olmalı' });
+    }
+
+    const varMi = await User.findOne({ email: eposta });
+    if (varMi) return res.status(400).json({ ok: false, message: 'Bu e-posta zaten kayıtlı' });
+
+    const seller = await User.create({
+      role: 'seller',
+      companyName: String(companyName).trim(),
+      name: String(name || '').trim(),
+      email: eposta,
+      password: await bcrypt.hash(String(password), 10),
+      phone: String(phone || '').trim(),
+      iban: String(iban || '').trim(),
+      ibanName: String(ibanName || '').trim(),
+      bankName: String(bankName || '').trim(),
+      address: pickAddress(address),
+    });
+
+    logAdminAction(req, {
+      action: 'seller_create',
+      targetType: 'user',
+      targetId: seller._id,
+      meta: { email: seller.email, companyName: seller.companyName },
+    });
+
+    res.status(201).json({ ok: true, id: seller._id, message: 'Satıcı oluşturuldu' });
+  } catch (e) {
+    console.error('Admin satıcı oluşturma hatası:', e);
+    res.status(500).json({ ok: false, message: 'Satıcı oluşturulamadı' });
   }
 });
 

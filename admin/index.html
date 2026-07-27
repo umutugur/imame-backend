@@ -103,17 +103,79 @@
       </table>
       <div id="sellersMsg" class="msg"></div>
 
-      <div class="card" style="max-width:520px;margin-top:22px">
-        <h3 class="serif" style="margin-bottom:12px">Yeni Satıcı Ekle</h3>
-        <label for="newSellerName">Ad Soyad</label>
-        <input id="newSellerName" placeholder="Yetkili adı">
-        <label for="newSellerCompany">Firma adı</label>
-        <input id="newSellerCompany" placeholder="Örn: Anadolu Tespih">
-        <label for="newSellerEmail">E-posta</label>
-        <input id="newSellerEmail" type="email" placeholder="ornek@firma.com">
-        <label for="newSellerPass">Şifre</label>
-        <input id="newSellerPass" type="password" placeholder="••••••••">
-        <button class="btn btn-primary" id="newSellerBtn" style="margin-top:14px">Satıcı Ekle</button>
+      <div class="card" style="max-width:720px;margin-top:22px">
+        <h3 class="serif" style="margin-bottom:4px">Yeni Satıcı Ekle</h3>
+        <div class="sub" style="margin-bottom:16px">Alanlar mobil uygulamadaki satıcı formuyla aynıdır.</div>
+
+        <div class="form-sec">Firma Bilgileri</div>
+        <div class="form-grid">
+          <div>
+            <label for="newSellerCompany">Firma adı *</label>
+            <input id="newSellerCompany" placeholder="Örn: Anadolu Tespih">
+          </div>
+          <div>
+            <label for="newSellerName">Yetkili adı soyadı</label>
+            <input id="newSellerName" placeholder="Ad Soyad">
+          </div>
+          <div>
+            <label for="newSellerEmail">E-posta *</label>
+            <input id="newSellerEmail" type="email" placeholder="ornek@firma.com" autocomplete="off">
+          </div>
+          <div>
+            <label for="newSellerPass">Şifre *</label>
+            <input id="newSellerPass" type="password" placeholder="En az 6 karakter" autocomplete="new-password">
+          </div>
+          <div>
+            <label for="newSellerPhone">Telefon</label>
+            <input id="newSellerPhone" placeholder="05XX XXX XX XX">
+          </div>
+        </div>
+
+        <div class="form-sec">Banka Bilgileri</div>
+        <div class="form-grid">
+          <div>
+            <label for="newSellerIban">IBAN</label>
+            <input id="newSellerIban" placeholder="TR00 0000 0000 0000 0000 0000 00">
+          </div>
+          <div>
+            <label for="newSellerIbanName">IBAN sahibi</label>
+            <input id="newSellerIbanName" placeholder="Hesap sahibinin adı">
+          </div>
+          <div>
+            <label for="newSellerBank">Banka adı</label>
+            <input id="newSellerBank" placeholder="Örn: Ziraat Bankası">
+          </div>
+        </div>
+
+        <div class="form-sec">Adres Bilgileri</div>
+        <div class="form-grid">
+          <div>
+            <label for="newSellerIl">İl</label>
+            <select id="newSellerIl"><option value="">İl seçiniz</option></select>
+          </div>
+          <div>
+            <label for="newSellerIlce">İlçe</label>
+            <select id="newSellerIlce" disabled><option value="">Önce il seçiniz</option></select>
+          </div>
+          <div>
+            <label for="newSellerMahalle">Mahalle</label>
+            <select id="newSellerMahalle" disabled><option value="">Önce ilçe seçiniz</option></select>
+          </div>
+          <div>
+            <label for="newSellerSokak">Sokak</label>
+            <input id="newSellerSokak" placeholder="Sokak / cadde">
+          </div>
+          <div>
+            <label for="newSellerApt">Apartman no</label>
+            <input id="newSellerApt" placeholder="Apartman">
+          </div>
+          <div>
+            <label for="newSellerDaire">Daire no</label>
+            <input id="newSellerDaire" placeholder="Daire">
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="newSellerBtn" style="margin-top:18px">Satıcı Ekle</button>
         <div id="newSellerMsg" class="msg"></div>
       </div>
     </section>

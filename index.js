@@ -28,6 +28,7 @@ const sellerPanelRoutes = require('./routes/sellerPanel');
 
 // ✅ Admin Panel (WEB) – yönetici API uçları
 const adminRoutes = require('./routes/admin');
+const geoRoutes = require('./routes/geo');
 
 // ✅ Models & Helpers for Cron Endpoints
 const Auction = require('./models/Auction');
@@ -101,6 +102,7 @@ app.use(sellerPanelRoutes);
 
 // ✅ Yönetici Paneli (WEB) – /api/admin/* uçları (rotaların tam yolu kendi içinde)
 app.use(adminRoutes);
+app.use(geoRoutes);
 
 // ───────────────────────────────────────────────────────────────
 // Health & Root

@@ -47,16 +47,87 @@ export function getSellerName(id) {
   return sellerNames.get(String(id)) || '';
 }
 
+/* ---------- Adres seçicileri ----------
+   Mahalle verisi toplam 10.8 MB; tarayıcıya indirmiyoruz. /api/geo uçları
+   yalnızca seçilen il/ilçenin altını döndürüyor, kimlik uzayı mobil formdakiyle
+   aynı kalıyor. */
+function fillSelect(el, items, bosMetin) {
+  el.innerHTML =
+    `<option value="">${bosMetin}</option>` +
+    items.map((i) => `<option value="${escapeHtml(i.id)}">${escapeHtml(i.ad)}</option>`).join('');
+  el.disabled = items.length === 0;
+}
+
+function resetSelect(el, bosMetin) {
+  el.innerHTML = `<option value="">${bosMetin}</option>`;
+  el.disabled = true;
+}
+
+async function initAddressSelects() {
+  const il = $('newSellerIl');
+  const ilce = $('newSellerIlce');
+  const mahalle = $('newSellerMahalle');
+
+  try {
+    const { items } = await apiJson('/api/geo/iller');
+    fillSelect(il, items, 'İl seçiniz');
+  } catch (err) {
+    if (err.message !== 'unauthorized') $('newSellerMsg').textContent = 'İl listesi alınamadı.';
+    return;
+  }
+
+  il.addEventListener('change', async () => {
+    resetSelect(mahalle, 'Önce ilçe seçiniz');
+    if (!il.value) return resetSelect(ilce, 'Önce il seçiniz');
+    const { items } = await apiJson(`/api/geo/ilceler?ilId=${encodeURIComponent(il.value)}`);
+    fillSelect(ilce, items, 'İlçe seçiniz');
+  });
+
+  ilce.addEventListener('change', async () => {
+    if (!ilce.value) return resetSelect(mahalle, 'Önce ilçe seçiniz');
+    const { items } = await apiJson(`/api/geo/mahalleler?ilceId=${encodeURIComponent(ilce.value)}`);
+    fillSelect(mahalle, items, 'Mahalle seçiniz');
+  });
+}
+
+/* ---------- Yeni satıcı ---------- */
+const FORM_IDS = [
+  'newSellerCompany', 'newSellerName', 'newSellerEmail', 'newSellerPass', 'newSellerPhone',
+  'newSellerIban', 'newSellerIbanName', 'newSellerBank',
+  'newSellerSokak', 'newSellerApt', 'newSellerDaire',
+];
+
 export function initSellers() {
+  initAddressSelects();
+
   $('newSellerBtn').addEventListener('click', async () => {
     const msg = $('newSellerMsg');
-    const name = $('newSellerName').value.trim();
-    const companyName = $('newSellerCompany').value.trim();
-    const email = $('newSellerEmail').value.trim();
+    const val = (id) => $(id).value.trim();
+
+    const companyName = val('newSellerCompany');
+    const email = val('newSellerEmail');
     const password = $('newSellerPass').value;
 
-    if (!name || !companyName || !email || !password) {
-      msg.textContent = 'Tüm alanlar zorunlu.';
+    if (!companyName || !email || !password) {
+      msg.textContent = 'Firma adı, e-posta ve şifre zorunludur.';
+      msg.className = 'msg err';
+      return;
+    }
+    if (password.length < 6) {
+      msg.textContent = 'Şifre en az 6 karakter olmalı.';
+      msg.className = 'msg err';
+      return;
+    }
+
+    // Adres kısmi doldurulursa mobil kayıtlarla uyumsuz veri oluşur; ya tamamı
+    // ya da hiçbiri.
+    const il = $('newSellerIl').value;
+    const ilce = $('newSellerIlce').value;
+    const mah = $('newSellerMahalle').value;
+    const sokak = val('newSellerSokak');
+    const adresDolu = [il, ilce, mah, sokak].filter(Boolean).length;
+    if (adresDolu > 0 && adresDolu < 4) {
+      msg.textContent = 'Adres için il, ilçe, mahalle ve sokak birlikte doldurulmalı.';
       msg.className = 'msg err';
       return;
     }
@@ -64,17 +135,36 @@ export function initSellers() {
     msg.textContent = 'Kaydediliyor…';
     msg.className = 'msg';
     try {
-      await apiJson('/api/auth/register', {
+      await apiJson('/api/admin/sellers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, role: 'seller', companyName }),
+        body: JSON.stringify({
+          companyName,
+          name: val('newSellerName'),
+          email,
+          password,
+          phone: val('newSellerPhone'),
+          iban: val('newSellerIban'),
+          ibanName: val('newSellerIbanName'),
+          bankName: val('newSellerBank'),
+          address: adresDolu === 4
+            ? {
+                ilId: Number(il),
+                ilceId: Number(ilce),
+                mahalleId: Number(mah),
+                sokak,
+                apartmanNo: val('newSellerApt'),
+                daireNo: val('newSellerDaire'),
+              }
+            : undefined,
+        }),
       });
       msg.textContent = 'Satıcı eklendi.';
       msg.className = 'msg ok';
-      $('newSellerName').value = '';
-      $('newSellerCompany').value = '';
-      $('newSellerEmail').value = '';
-      $('newSellerPass').value = '';
+      FORM_IDS.forEach((id) => { $(id).value = ''; });
+      $('newSellerIl').value = '';
+      resetSelect($('newSellerIlce'), 'Önce il seçiniz');
+      resetSelect($('newSellerMahalle'), 'Önce ilçe seçiniz');
       await loadSellers();
     } catch (err) {
       if (err.message === 'unauthorized') return;

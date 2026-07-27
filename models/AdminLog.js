@@ -12,6 +12,7 @@ const adminLogSchema = new mongoose.Schema({
       'ban', 'unban', 'role_change', 'auction_delete',
       'receipt_approve', 'receipt_reject', 'notification_send',
       'bulk_ban', 'bulk_unban', 'bulk_auction_delete',
+      'seller_create',
     ],
   },
   targetType: { type: String }, // 'user' | 'auction' | 'broadcast'

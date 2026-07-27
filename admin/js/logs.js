@@ -15,6 +15,7 @@ const ACTION_LABEL = {
   bulk_ban: 'Toplu ban',
   bulk_unban: 'Toplu ban kaldırma',
   bulk_auction_delete: 'Toplu mezat silme',
+  seller_create: 'Satıcı oluşturma',
 };
 
 const TARGET_LABEL = { user: 'Kullanıcı', auction: 'Mezat', broadcast: 'Duyuru' };
