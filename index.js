@@ -39,7 +39,27 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 // ───────────────────────────────────────────────────────────────
 app.set('trust proxy', 1);              // Render/Proxy arkasında IP vb. için
-app.use(helmet());
+// Helmet'in varsayılan CSP'si img-src'yi 'self' ile sınırlıyor; bu, satıcı panelinde
+// Cloudinary'deki dekont/mezat görsellerini ve seed mezatlarının Pexels/Unsplash
+// fotoğraflarını tarayıcıda engelliyordu. Yalnızca img-src'yi genişletiyoruz —
+// diğer direktifler (script-src 'self' vb.) varsayılan sıkılığında kalıyor.
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        'img-src': [
+          "'self'",
+          'data:',
+          'blob:', // form önizlemesi: URL.createObjectURL(file)
+          'https://res.cloudinary.com',
+          'https://images.pexels.com',
+          'https://images.unsplash.com',
+        ],
+      },
+    },
+  })
+);
 app.use(cors());
 app.use(express.json({ limit: '2mb' })); // JSON body limiti
 app.use(express.urlencoded({ extended: true }));
