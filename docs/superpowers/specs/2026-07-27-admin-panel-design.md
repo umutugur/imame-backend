@@ -29,11 +29,15 @@ Backend'de admin yetkili uçlar: `GET /api/users/all`, `GET /api/users/banned`,
 ## 2. Kapsam
 
 **Dahil:** Mobildeki tüm admin işlevlerinin web karşılığı + platform genel bakışı, moderasyon
-(şikayet + süreli ban), kullanıcı/satıcı yönetimi, tüm mezatların denetimi. Ayrıca mobil ban
-ekranının gerçek hale getirilmesi.
+(şikayet + süreli ban), kullanıcı/satıcı yönetimi, tüm mezatların denetimi, **denetim günlüğü,
+toplu işlemler ve rol yönetimi**. Ayrıca mobil ban ekranının gerçek hale getirilmesi.
 
-**Hariç (YAGNI):** Rol değiştirme dışındaki yetki yönetimi, denetim günlüğü (audit log),
-toplu kullanıcı işlemleri, admin hesabı oluşturma, e-posta gönderimi (push yeterli).
+**Hariç:** Bkz. §9. Kısaca: admin 2FA, günlük dışa aktarımı, panelden sıfırdan admin hesabı
+açma, e-posta bildirimi.
+
+Bu, satıcı panelinden (8 görev) belirgin biçimde büyük bir iştir — 9 backend ucu, yeni bir
+model, 8 panel bölümü ve iki mobil ekran düzeltmesi. Tek seferde, paralel subagent'larla
+yürütülecek.
 
 ## 3. Mimari — paylaşılan panel altyapısı
 
@@ -124,7 +128,64 @@ uç olmadan panel, her satıcı için ayrı sorgu atmak zorunda kalırdı (N+1).
 `revenue` yine "biten + dekontu `approved`" tanımıyla; tek `Auction.aggregate` ile satıcıya
 göre gruplanır.
 
-### 4.6 `GET /api/users/all` — GENİŞLETİLİR
+### 4.6 Denetim günlüğü (audit log) — YENİ
+
+**`models/AdminLog.js`** (yeni):
+
+```js
+{ actor: ObjectId(User), actorEmail: String, action: String,
+  targetType: String, targetId: ObjectId, meta: Object, createdAt: Date }
+```
+
+`action` değerleri: `ban`, `unban`, `role_change`, `auction_delete`, `receipt_approve`,
+`receipt_reject`, `notification_send`, `bulk_ban`, `bulk_unban`, `bulk_auction_delete`.
+İndeksler: `{ createdAt: -1 }`, `{ actor: 1, createdAt: -1 }`, `{ action: 1, createdAt: -1 }`.
+**TTL yoktur** — denetim kaydının amacı kalıcılıktır.
+
+**`utils/adminLog.js`** (yeni): `logAdminAction(req, { action, targetType, targetId, meta })`.
+`req.user`'dan aktörü alır. **Fire-and-forget**: günlük yazımı başarısız olursa asıl işlem
+bozulmaz (hata yalnızca konsola yazılır).
+
+Çağrıldığı yerler: ban, unban, rol değişimi, mezat silme, dekont onay/ret (**yalnızca aktör
+admin ise** — satıcının kendi dekontunu onaylaması denetim kaydı değildir), bildirim gönderimi
+ve tüm toplu işlemler. Toplu işlemlerde **her hedef için ayrı kayıt** yazılır; aksi halde
+"kim banlandı" sorusu yanıtsız kalır.
+
+**`GET /api/admin/logs`** — `requireAuth(['admin'])`. Sorgu: `action`, `actor`, `page`,
+`limit` (varsayılan 50, azami 100). Yanıt: `{ ok: true, items, total, page, limit }`,
+`actor` populate (`name`, `email`), en yeniden eskiye.
+
+### 4.7 Toplu işlemler — YENİ
+
+Üç uç, hepsi `requireAuth(['admin'])`, hepsi **azami 100 hedef** kabul eder:
+
+| Uç | Gövde |
+|---|---|
+| `PATCH /api/admin/users/bulk-ban` | `{ userIds: [], durationDays?, reason? }` |
+| `PATCH /api/admin/users/bulk-unban` | `{ userIds: [] }` |
+| `POST /api/admin/auctions/bulk-delete` | `{ auctionIds: [], reason }` |
+
+Güvenlik kuralları:
+
+- İsteği yapan admin'in **kendi kimliği listeden çıkarılır** (kazara kendini banlama).
+- **Diğer admin hesapları toplu ban'dan muaftır** — yönetici kadrosunun tek hamlede kilitlenmesi
+  engellenir. Tek tek ban için §4.3 kullanılır.
+- Yanıt her zaman `{ ok: true, affected: n, skipped: [{ id, reason }] }` döndürür; sessizce
+  atlanan hedef olmaz.
+- Her hedef için ayrı denetim kaydı yazılır.
+
+### 4.8 `PATCH /api/admin/users/:id/role` — YENİ
+
+Gövde: `{ role: 'buyer' | 'seller' | 'admin' }`. En riskli işlem olduğu için korkuluklar:
+
+- `:id === req.user.id` → **400** ("Kendi rolünüzü değiştiremezsiniz"). Hem kendini kilitlemeyi
+  hem yetki oyunlarını engeller.
+- Son admin'i `admin` dışına almak → **400** ("Sistemde en az bir yönetici kalmalı").
+  Sayım işlem öncesi yapılır.
+- `role` üç değerden biri değilse → **400**.
+- Değişim denetim günlüğüne `role_change` olarak eski ve yeni rolle birlikte yazılır.
+
+### 4.9 `GET /api/users/all` — GENİŞLETİLİR
 `q` (ad/e-posta araması), `role` filtresi ve `page`/`limit` sayfalama eklenir. Yanıt bugünkü
 dizi biçimini korur mu? **Hayır** — `{ ok: true, items, total }` biçimine geçer.
 Bu ucu bugün yalnızca mobil `UserListScreen` kullanıyor; o ekran da bu spec kapsamında
@@ -135,12 +196,13 @@ güncellenir (bkz. §6).
 | Bölüm | İçerik |
 |---|---|
 | **Genel Bakış** | §4.1 metrikleri; ödeme sağlığı ve dönüşüm öne çıkar |
-| **Kullanıcılar** | Arama + rol filtresi + sayfalama; satır: ad, e-posta, rol, kayıt tarihi, ban durumu (süre dahil). Eylemler: **süreli/süresiz ban + sebep**, ban kaldır, detay (§4.4 istatistikleri) |
+| **Kullanıcılar** | Arama + rol filtresi + sayfalama; satır: ad, e-posta, rol, kayıt tarihi, ban durumu (süre dahil). Eylemler: **süreli/süresiz ban + sebep**, ban kaldır, **rol değiştir** (§4.8), detay (§4.4). **Seçim kutuları + toplu ban/ban kaldır** (§4.7), onay adımıyla |
 | **Satıcılar** | Rolü `seller` olan kullanıcılar; §4.5'ten satıcı başına mezat sayısı, ciro, dönüşüm. **Yeni satıcı ekle** formu (mevcut kayıt akışı) |
-| **Mezatlar** | Tüm satıcıların mezatları; durum/satıcı/arama filtreleri, sayfalama; analitik rozetleri; **sebep bildirerek silme** |
+| **Mezatlar** | Tüm satıcıların mezatları; durum/satıcı/arama filtreleri, sayfalama; analitik rozetleri; **sebep bildirerek silme** ve **toplu silme** (§4.7), onay adımıyla |
 | **Dekontlar** | Tüm satıcılar genelinde; kazanan, geri sayım, dekont görseli, onayla/reddet. Filtre: onay bekleyen / dekontu olan / süresi dolan |
 | **Şikayetler** | Şikayet kuyruğu (kim, kimi, ne zaman, mesaj); şikayet edilen kullanıcıya satırdan doğrudan ban |
 | **Bildirimler** | Push gönderimi (mevcut uç) |
+| **Kayıtlar** | Denetim günlüğü (§4.6): kim, ne zaman, hangi eylemi, hangi hedefte. Eylem ve aktöre göre filtre, sayfalama |
 
 ## 6. Mobil düzeltmeler
 
@@ -149,7 +211,7 @@ e-posta ile kullanıcı aranır (`GET /api/users/all?q=`), bulunan kullanıcı g
 (süresiz / 7 / 30 gün) ve sebep seçilerek `PATCH /api/users/ban/:id` çağrılır. Sonuç tema
 modalıyla bildirilir. Ekranın heritage tasarımı korunur.
 
-**`frontend/screens/UserListScreen.js`** §4.6'daki yeni yanıt biçimine (`{ ok, items, total }`)
+**`frontend/screens/UserListScreen.js`** §4.9'daki yeni yanıt biçimine (`{ ok, items, total }`)
 uyarlanır; aksi halde liste boşalır.
 
 ## 7. Hata durumları
@@ -162,6 +224,10 @@ uyarlanır; aksi halde liste boşalır.
 | Ban push'u başarısız | Sessizce yutulur; ban yine de uygulanır |
 | Boş sonuç (arama/filtre) | Bölüm içinde bilgi mesajı, sayaçlarla birlikte |
 | Ağ hatası | Bölüm içinde tekrar-dene aksiyonlu hata kutusu |
+| Kendi rolünü değiştirme | 400; arayüzde kendi satırında rol seçici pasif |
+| Son yöneticiyi düşürme | 400 ("Sistemde en az bir yönetici kalmalı") |
+| Toplu işlemde atlanan hedef | Yanıttaki `skipped` listesi kullanıcıya sebebiyle gösterilir |
+| Denetim kaydı yazılamadı | Asıl işlem tamamlanır; hata yalnızca sunucu günlüğüne yazılır |
 
 ## 8. Doğrulama
 
@@ -178,10 +244,17 @@ Test çatısı yok; doğrulama komut ve gözlemle yapılır:
 - Mobil: değişen ekranlarda babel dönüşümü + tam paket derlemesi; ban akışı gerçekten
   `PATCH` isteği atıyor.
 
-## 9. Kapsam dışı bırakılanların gerekçesi
+## 9. Kapsam dışı bırakılanlar
 
-- **Denetim günlüğü:** Kimin neyi ne zaman banladığını tutmak ayrı bir model ve her admin
-  eyleminde yazma gerektirir; tek yöneticili bir sistemde henüz karşılığı yok.
-- **Toplu işlemler:** Kullanıcı sayısı 52; toplu ban/silme ihtiyacı doğmadı.
-- **Rol yönetimi (admin atama):** Güvenlik açısından en riskli işlem; şimdilik veritabanından
-  yapılması daha güvenli.
+Önceki turda kapsam dışı tutulan denetim günlüğü, toplu işlemler ve rol yönetimi **kapsama
+alındı** (§4.6–§4.8). Geriye kalanlar:
+
+- **Admin için iki adımlı doğrulama (2FA):** Rol yönetimi eklendiği için yönetici hesabının
+  değeri arttı; 2FA mantıklı bir sonraki adımdır ama kimlik doğrulama akışını baştan
+  ilgilendirir, kendi spec'ini hak eder.
+- **Denetim günlüğü dışa aktarımı (CSV):** Günlük panelde okunabiliyor; dışa aktarım ihtiyacı
+  doğduğunda eklenir.
+- **Panelden sıfırdan admin hesabı oluşturma:** Gerekmiyor — satıcı ekleme formuyla hesap
+  açılıp §4.8 ile rolü `admin` yapılabilir.
+- **E-posta bildirimi:** Push yeterli; Brevo altyapısı şifre sıfırlama için kurulu ama
+  moderasyon bildirimleri için genişletilmiyor.
