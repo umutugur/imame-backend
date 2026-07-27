@@ -26,6 +26,9 @@ const devicesRoutes = require('./routes/devices');
 // ✅ Seller Panel (yeni)
 const sellerPanelRoutes = require('./routes/sellerPanel');
 
+// ✅ Admin Panel (WEB) – yönetici API uçları
+const adminRoutes = require('./routes/admin');
+
 // ✅ Models & Helpers for Cron Endpoints
 const Auction = require('./models/Auction');
 const Bid = require('./models/Bid');
@@ -95,6 +98,9 @@ app.use('/api/devices', devicesRoutes);
 
 // ✅ Satıcı Paneli (WEB) – HTML sayfası + seller API endpoints
 app.use(sellerPanelRoutes);
+
+// ✅ Yönetici Paneli (WEB) – /api/admin/* uçları (rotaların tam yolu kendi içinde)
+app.use(adminRoutes);
 
 // ───────────────────────────────────────────────────────────────
 // Health & Root

@@ -84,7 +84,7 @@ function applyFilter() {
 }
 
 export async function loadReceipts() {
-  const data = await apiJson('/api/admin/auctions?status=ended&limit=100');
+  const data = await apiJson('/api/admin/auctions?status=receipts&limit=100');
   const items = data.items || [];
   all = items.filter((a) => a.isEnded && a.winner);
   all.sort((a, b) => {

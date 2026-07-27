@@ -111,6 +111,14 @@ router.get('/api/admin/auctions', requireAuth(['admin']), async (req, res) => {
 
     if (req.query.status === 'active') filter.isEnded = false;
     else if (req.query.status === 'ended') filter.isEnded = true;
+    // Dekont bölümü yalnızca kazananı olan biten mezatlarla ilgilenir. Bu filtreyi
+    // sunucuda uygulamazsak panel, createdAt'e göre en yeni 100 mezatı çeker ve
+    // gerçek dekontlar (hepsi daha eski kayıtlarda) listenin dışında kalır —
+    // satıcı panelinde bir kez yaşadığımız hatanın aynısı.
+    else if (req.query.status === 'receipts') {
+      filter.isEnded = true;
+      filter.winner = { $ne: null };
+    }
 
     if (req.query.seller && mongoose.Types.ObjectId.isValid(req.query.seller)) {
       filter.seller = req.query.seller;
@@ -127,7 +135,9 @@ router.get('/api/admin/auctions', requireAuth(['admin']), async (req, res) => {
         )
         .populate('winner', 'name email phone')
         .populate('seller', 'companyName email')
-        .sort({ createdAt: -1 })
+        // Dekontlarda sıralama ödeme vadesine göre: liste 100'ü aşarsa bile
+        // işlem bekleyen kayıtlar ilk sayfada kalır.
+        .sort(req.query.status === 'receipts' ? { paymentDeadline: -1 } : { createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean(),
