@@ -102,4 +102,84 @@ router.get('/api/admin/overview', requireAuth(['admin']), async (req, res) => {
   }
 });
 
+// ── Tüm mezatlar (Mezatlar + Dekontlar bölümlerinin ortak kaynağı) ──
+router.get('/api/admin/auctions', requireAuth(['admin']), async (req, res) => {
+  try {
+    const limit = clampLimit(req.query.limit);
+    const page = pageOf(req.query.page);
+    const filter = {};
+
+    if (req.query.status === 'active') filter.isEnded = false;
+    else if (req.query.status === 'ended') filter.isEnded = true;
+
+    if (req.query.seller && mongoose.Types.ObjectId.isValid(req.query.seller)) {
+      filter.seller = req.query.seller;
+    }
+    if (req.query.q) {
+      filter.title = { $regex: String(req.query.q).trim(), $options: 'i' };
+    }
+
+    const [items, total] = await Promise.all([
+      Auction.find(filter)
+        .select(
+          '_id title currentPrice startingPrice endsAt images isSigned isEnded ' +
+          'receiptStatus receiptUrl paymentDeadline impressionCount bidCount winner seller createdAt'
+        )
+        .populate('winner', 'name email phone')
+        .populate('seller', 'companyName email')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      Auction.countDocuments(filter),
+    ]);
+
+    res.json({ ok: true, items, total, page, limit });
+  } catch (e) {
+    console.error('Admin mezat listesi hatası:', e);
+    res.status(500).json({ ok: false, message: 'Mezatlar alınamadı' });
+  }
+});
+
+// ── Satıcılar + performans (tek aggregate; panel N+1 sorgu atmasın diye) ──
+router.get('/api/admin/sellers', requireAuth(['admin']), async (req, res) => {
+  try {
+    const sellers = await User.find({ role: 'seller' })
+      .select('_id name companyName email createdAt isBanned')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const stats = await Auction.aggregate([
+      { $group: {
+          _id: '$seller',
+          auctionCount: { $sum: 1 },
+          activeCount: { $sum: { $cond: [{ $eq: ['$isEnded', false] }, 1, 0] } },
+          impressions: { $sum: '$impressionCount' },
+          bids: { $sum: '$bidCount' },
+          revenue: { $sum: { $cond: [
+            { $and: [{ $eq: ['$isEnded', true] }, { $eq: ['$receiptStatus', 'approved'] }] },
+            '$currentPrice', 0] } },
+      } },
+    ]);
+    const byId = new Map(stats.map((s) => [String(s._id), s]));
+
+    const items = sellers.map((s) => {
+      const st = byId.get(String(s._id)) || {};
+      return {
+        ...s,
+        auctionCount: st.auctionCount || 0,
+        activeCount: st.activeCount || 0,
+        impressions: st.impressions || 0,
+        bids: st.bids || 0,
+        revenue: st.revenue || 0,
+      };
+    });
+
+    res.json({ ok: true, items });
+  } catch (e) {
+    console.error('Admin satıcı listesi hatası:', e);
+    res.status(500).json({ ok: false, message: 'Satıcılar alınamadı' });
+  }
+});
+
 module.exports = router;
