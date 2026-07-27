@@ -6,6 +6,7 @@ const {
   getBannedUsers,
   banUser,
   unbanUser,
+  changeRole,
   updateNotificationToken,
   addFavoriteSeller,
   removeFavoriteSeller,
@@ -61,6 +62,7 @@ router.get('/all', requireAuth(['admin']), getAllUsers);
 router.get('/banned', requireAuth(['admin']), getBannedUsers);
 router.patch('/ban/:id', requireAuth(['admin']), banUser);
 router.patch('/unban/:id', requireAuth(['admin']), unbanUser);
+router.patch('/:id/role', requireAuth(['admin']), changeRole);
 
 // Bildirim token
 router.post(

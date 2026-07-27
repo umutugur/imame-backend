@@ -2,6 +2,8 @@ const User = require('../models/User');
 // Bu modelleri deleteMe’de kullanıyoruz:
 const Auction = require('../models/Auction');
 const Bid = require('../models/Bid');
+const { logAdminAction } = require('../utils/adminLog');
+const { sendExpoPushNotification } = require('../utils/expoPush');
 
 // 🔹 Tüm kullanıcıları getir
 exports.getAllUsers = async (_req, res) => {
@@ -61,12 +63,47 @@ exports.deleteMe = async (req, res) => {
   }
 };
 
-// 🔹 Kullanıcıyı banla
+// 🔹 Kullanıcıyı banla (süreli/süresiz + sebep)
 exports.banUser = async (req, res) => {
   try {
     const userId = req.params.id;
-    await User.findByIdAndUpdate(userId, { isBanned: true });
-    res.status(200).json({ message: 'Kullanıcı banlandı' });
+    if (String(userId) === String(req.user.id)) {
+      return res.status(400).json({ message: 'Kendi hesabınızı banlayamazsınız' });
+    }
+
+    const { durationDays, reason } = req.body || {};
+    const days = Number(durationDays);
+    const bannedUntil = Number.isFinite(days) && days > 0
+      ? new Date(Date.now() + days * 24 * 3600 * 1000)
+      : null; // süresiz
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { isBanned: true, bannedUntil, banReason: reason || null },
+      { new: true }
+    );
+    if (!user) return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
+
+    logAdminAction(req, {
+      action: 'ban', targetType: 'user', targetId: user._id,
+      meta: { durationDays: days || null, reason: reason || null },
+    });
+
+    // Kullanıcıyı bilgilendir — fire-and-forget, push hatası ban'ı bozmaz
+    if (user.notificationToken) {
+      const sure = bannedUntil
+        ? `${days} gün boyunca`
+        : 'süresiz olarak';
+      sendExpoPushNotification(
+        user.notificationToken,
+        'Hesabınız askıya alındı',
+        `Hesabınız ${sure} askıya alındı.${reason ? ' Sebep: ' + reason : ''}`,
+        { type: 'ban', userId: String(user._id) },
+        user._id
+      ).catch(() => {});
+    }
+
+    res.status(200).json({ message: 'Kullanıcı banlandı', bannedUntil });
   } catch (err) {
     res.status(500).json({ message: 'Ban işlemi başarısız', error: err.message });
   }
@@ -75,11 +112,54 @@ exports.banUser = async (req, res) => {
 // 🔹 Kullanıcıyı unbanla
 exports.unbanUser = async (req, res) => {
   try {
-    const userId = req.params.id;
-    await User.findByIdAndUpdate(userId, { isBanned: false });
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { isBanned: false, bannedUntil: null, banReason: null },
+      { new: true }
+    );
+    if (!user) return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
+    logAdminAction(req, { action: 'unban', targetType: 'user', targetId: user._id });
+
     res.status(200).json({ message: 'Kullanıcı banı kaldırıldı' });
   } catch (err) {
     res.status(500).json({ message: 'Unban işlemi başarısız', error: err.message });
+  }
+};
+
+// 🔹 Rol değişimi — sistemin en riskli işlemi, üç korkuluğu var.
+exports.changeRole = async (req, res) => {
+  try {
+    const { role } = req.body || {};
+    if (!['buyer', 'seller', 'admin'].includes(role)) {
+      return res.status(400).json({ message: 'Geçersiz rol' });
+    }
+    if (String(req.params.id) === String(req.user.id)) {
+      return res.status(400).json({ message: 'Kendi rolünüzü değiştiremezsiniz' });
+    }
+
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
+
+    // Son yöneticiyi düşürme koruması: aksi halde sisteme admin erişimi tümüyle kaybolur.
+    if (user.role === 'admin' && role !== 'admin') {
+      const adminCount = await User.countDocuments({ role: 'admin' });
+      if (adminCount <= 1) {
+        return res.status(400).json({ message: 'Sistemde en az bir yönetici kalmalı' });
+      }
+    }
+
+    const oldRole = user.role;
+    user.role = role;
+    await user.save();
+
+    logAdminAction(req, {
+      action: 'role_change', targetType: 'user', targetId: user._id,
+      meta: { from: oldRole, to: role },
+    });
+
+    res.json({ message: 'Rol güncellendi', role });
+  } catch (err) {
+    res.status(500).json({ message: 'Rol değiştirilemedi', error: err.message });
   }
 };
 
