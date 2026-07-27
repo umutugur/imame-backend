@@ -1,3 +1,18 @@
+# Ortam değişkenleri — ASLA commit edilmez
+.env
+.env.*
+!.env.example
+
+# Kimlik dosyaları
 firebase-adminsdk.json
+*.pem
+*.p8
+*.p12
+*.key
+
+# Bağımlılıklar ve sistem
+node_modules/
+.DS_Store
+
 # Brainstorming görsel companion
 .superpowers/
