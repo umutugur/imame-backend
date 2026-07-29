@@ -35,6 +35,8 @@ const Auction = require('./models/Auction');
 const Bid = require('./models/Bid');
 const User = require('./models/User');
 const { sendExpoPushNotification } = require('./utils/expoPush');
+// GEÇİCİ — mağaza incelemesi süresince demo içeriği ayakta tutar.
+const reactivateMockAuctions = require('./utils/reactivateMockAuctions');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -204,6 +206,25 @@ app.post('/cron/check-receipts', requireCronKey, async (_req, res) => {
   } catch (err) {
     console.error('❌ /cron/check-receipts hata:', err);
     res.status(500).send('❌ Error checking receipts.');
+  }
+});
+
+// 3️⃣ GEÇİCİ — demo mezatları yeniden yayına al (mağaza incelemesi süresince).
+// 22:05'te, /cron/end-auctions mezatları kapattıktan sonra çalışmalı.
+// İnceleme onaylanınca bu uç, utils/reactivateMockAuctions.js ve
+// scripts/reactivateMockAuctions.js birlikte silinebilir.
+app.post('/cron/reactivate-mock-auctions', requireCronKey, async (_req, res) => {
+  try {
+    const r = await reactivateMockAuctions();
+    if (r.skipped) {
+      console.log('⏭️ /cron/reactivate-mock-auctions atlandı:', r.reason);
+      return res.json(r);
+    }
+    console.log(`✅ ${r.reactivated} demo mezat yeniden yayında (bitiş: ${r.endsAt.toISOString()})`);
+    res.json(r);
+  } catch (err) {
+    console.error('❌ /cron/reactivate-mock-auctions hata:', err);
+    res.status(500).json({ ok: false, message: 'Demo mezatlar yeniden açılamadı' });
   }
 });
 
